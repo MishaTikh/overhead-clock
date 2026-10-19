@@ -647,8 +647,8 @@ def scene_overhead(ctx, t):
         cols = frame_cols("DENVER", max(0.0, lt - 1.4), speed=22, hold=0.8)
         draw_device(ctx, W - 520, H - 300 + (1 - slide) * 420, 820, cols, (1.0, 0.47, 0.0), 0.95, alpha=slide)  # default plane color: airline unknown
     a = window(lt, 1.4, 6.9, 0.3)
-    led_caption(ctx, "WHERE IT CAME FROM,", 70, 12, a, ease_out(clamp((lt - 1.4) / 1.0)))
-    led_caption(ctx, "OR WHERE IT'S GOING.", 190, 12, a, ease_out(clamp((lt - 2.3) / 1.0)))
+    led_caption(ctx, "CURIOUS WHERE IT CAME FROM", 70, 11, a, ease_out(clamp((lt - 1.2) / 1.1)))
+    led_caption(ctx, "OR WHERE IT'S GOING?", 180, 11, a, ease_out(clamp((lt - 2.2) / 1.0)))
 
 
 def scene_rings(ctx, t):
@@ -757,19 +757,20 @@ def soundtrack(path):
     jet = decode_audio(os.path.join(ASSETS, "landing_trees.mp4"))
     jet /= np.abs(jet).max() + 1e-9
 
-    def place(sample, start, gain, fade=0.4):
+    def place(sample, start, gain, fade_in=0.4, fade_out=0.4):
         i0 = int(start * SR)
         s = sample[: max(0, min(len(sample), n - i0))].copy()
-        f = int(fade * SR)
-        s[:f] *= np.linspace(0, 1, f)
-        s[-f:] *= np.linspace(1, 0, f)
+        fi, fo = int(fade_in * SR), int(fade_out * SR)
+        s[:fi] *= np.sin(np.linspace(0, np.pi / 2, fi)) ** 2   # smooth (equal-power) ramps
+        s[-fo:] *= np.cos(np.linspace(0, np.pi / 2, fo)) ** 2
         out[i0:i0 + len(s)] += gain * s
         env = np.zeros(n)
         env[i0:i0 + len(s)] = np.abs(s).mean() and 1.0
         return env
 
     jet_env = np.zeros(n)
-    jet_env += place(jet, 4.5, 0.95)     # the Dreamliner's own sound
+    # the Dreamliner's own sound: swells in, and has faded away by the cut at 8.7 s
+    jet_env += place(jet[: int(4.15 * SR)], 4.5, 0.95, fade_in=1.0, fade_out=1.6)
     jet_env = np.convolve(np.clip(jet_env, 0, 1), np.ones(SR // 4) / (SR // 4), mode="same")
     rng = np.random.default_rng(1)
     for k in range(4):                   # button clicks
