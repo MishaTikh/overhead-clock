@@ -1,0 +1,16 @@
+# PlatformIO
+.pio/
+.vscode/
+firmware/src/ui_html.h
+firmware/release/
+*.bin
+# Python
+__pycache__/
+*.pyc
+.venv/
+# Prototype run output
+prototype/passes*.csv
+prototype/config.json
+# OS
+.DS_Store
+Thumbs.db

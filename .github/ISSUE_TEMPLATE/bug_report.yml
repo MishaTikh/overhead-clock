@@ -1,0 +1,27 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Please don't include your home address, coordinates, Wi-Fi name or passwords."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      description: Shown on the settings page under Wi-Fi and security.
+  - type: input
+    id: airport
+    attributes:
+      label: Nearest airport code
+      placeholder: e.g. MSP
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce

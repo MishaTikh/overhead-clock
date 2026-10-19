@@ -1,0 +1,612 @@
+<meta charset="utf-8">
+<title>Overhead Clock Settings</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one narrow column of settings groups under a live replica of the sign; phone first. */
+  :root {
+    --bg: #f1f0ec; --panel: #fbfbf9; --fg: #1c1e21; --muted: #676b71; --line: #dddad3;
+    --accent: #c4410f; --accent-fg: #ffffff; --ok: #2f7f53; --warn: #a3650b; --bad: #b3261e;
+    --face: #0b0b0b; --off: #171717;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131416; --panel: #1b1c1f; --fg: #e9e7e3; --muted: #9b9fa6; --line: #2c2e32;
+      --accent: #ff7a3d; --accent-fg: #1a0d05; --ok: #5cc48d; --warn: #e3a54a; --bad: #ff8a80; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131416; --panel: #1b1c1f; --fg: #e9e7e3; --muted: #9b9fa6; --line: #2c2e32;
+    --accent: #ff7a3d; --accent-fg: #1a0d05; --ok: #5cc48d; --warn: #e3a54a; --bad: #ff8a80; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--sans); }
+  main { max-width: 560px; margin: 0 auto; padding-block: 20px 64px;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+         display: grid; gap: 18px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 1.25rem; margin: 0; letter-spacing: -0.01em; }
+  .chip { font: 600 0.75rem var(--sans); padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .chip.ok { color: var(--ok); border-color: currentColor; }
+  .chip.warn { color: var(--warn); border-color: currentColor; }
+  .banner { background: var(--panel); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; font-size: 0.85rem; color: var(--muted); }
+
+  .face { background: var(--face); border-radius: 10px; padding: 8px; }
+  canvas { display: block; width: 100%; height: auto; aspect-ratio: 4 / 1; max-width: 100%; }
+  .signline { display: flex; justify-content: space-between; gap: 8px; font-size: 0.82rem; color: var(--muted); margin-top: 6px; }
+
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+  h2 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0; font-weight: 600; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .row > label, .row > span:first-child { flex: 1 1 180px; min-width: 0; }
+  .hint { color: var(--muted); font-size: 0.82rem; margin: 0; }
+  input[type="text"], input[type="password"], select {
+    font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%; }
+  input[type="color"] { width: 46px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 2px; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .pair { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--bg); }
+  .seg button { font: 600 0.85rem var(--sans); border: 0; background: transparent; color: var(--muted); padding: 7px 12px; border-radius: 999px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+  .switch { position: relative; width: 44px; height: 26px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; }
+  .switch span { position: absolute; inset: 0; background: var(--line); border-radius: 999px; transition: background .15s; pointer-events: none; }
+  .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--panel); transition: transform .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(18px); }
+  .btn { font: 600 0.88rem var(--sans); border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 9px 14px; cursor: pointer; white-space: nowrap; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .btn.danger { color: var(--bad); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .val { font: 500 0.85rem var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); min-width: 4.5em; text-align: right; }
+  .msg { font-size: 0.85rem; margin: 0; }
+  .msg.ok { color: var(--ok); } .msg.bad { color: var(--bad); } .msg.warn { color: var(--warn); }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font: 0.82rem var(--mono); font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num, th.num { text-align: right; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.88rem; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .stat { display: grid; gap: 2px; min-width: 0; }
+  .stat b { font: 600 1.35rem var(--sans); font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 0.78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; align-items: end; height: 56px; }
+  .hours div { position: relative; height: 100%; }
+  .hours i, .hours u { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 2px 2px 0 0; }
+  .hours u { background: var(--line); }
+  .hours i { background: var(--accent); left: 25%; right: 25%; }
+  .hourlabels { display: flex; justify-content: space-between; font: 0.7rem var(--mono); color: var(--muted); }
+  .badge { display: inline-block; font: 600 0.78rem var(--sans); padding: 3px 10px; border-radius: 999px; border: 1px solid currentColor; }
+  .badge.on { color: var(--ok); } .badge.off { color: var(--muted); }
+  .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 14px; }
+  .checks label { display: flex; gap: 8px; align-items: center; font-size: 0.92rem; }
+  .checks input { width: 18px; height: 18px; accent-color: var(--accent); }
+  @media (max-width: 420px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+           background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 999px; font-size: 0.85rem; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main>
+  <header>
+    <h1>Overhead Clock</h1>
+    <span class="chip" id="chip">Connecting…</span>
+  </header>
+  <div class="banner" id="demo" hidden>Demo with sample data. On a real clock this page opens at http://overhead.local or the address the clock scrolls when you hold its middle button.</div>
+
+  <div>
+    <div class="face"><canvas id="led" width="1280" height="320"></canvas></div>
+    <div class="signline"><span id="signtext">—</span><span id="signdb"></span></div>
+  </div>
+
+  <section aria-labelledby="h-today">
+    <h2 id="h-today">Today</h2>
+    <div class="stats">
+      <div class="stat"><b id="t-planes">0</b><span>planes heard</span></div>
+      <div class="stat"><b id="t-farthest">—</b><span id="t-farthest-sub">farthest</span></div>
+      <div class="stat"><b id="t-loudest">—</b><span id="t-loudest-sub">loudest</span></div>
+    </div>
+    <div>
+      <div class="hours" id="hours" aria-label="Planes heard per hour today, against a usual day"></div>
+      <div class="hourlabels"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>11p</span></div>
+    </div>
+    <p class="hint" id="t-hours-hint">Orange bars are today; grey bars are a usual day, learned over the first week.</p>
+    <p class="msg" id="t-rare"></p>
+  </section>
+
+  <section aria-labelledby="h-wx">
+    <h2 id="h-wx">Airport weather</h2>
+    <div class="row"><span id="wx-line">—</span><span class="badge off" id="wx-flow">—</span></div>
+    <p class="hint" id="wx-raw"></p>
+  </section>
+
+  <section aria-labelledby="h-loc">
+    <h2 id="h-loc">Home location</h2>
+    <label for="address" class="hint">Street address. It's looked up once to find your coordinates, nearest airport and time zone.</label>
+    <div class="pair">
+      <input type="text" id="address" autocomplete="street-address" placeholder="Street, city, postcode or ZIP">
+      <button class="btn primary" id="locate">Look up</button>
+    </div>
+    <details>
+      <summary class="hint">Rather not send your address anywhere? Enter coordinates instead.</summary>
+      <div class="pair" style="grid-template-columns: 1fr 1fr auto; margin-top: 8px">
+        <input type="text" id="lat" inputmode="decimal" placeholder="Latitude, e.g. 44.93" aria-label="Latitude">
+        <input type="text" id="lon" inputmode="decimal" placeholder="Longitude, e.g. -93.34" aria-label="Longitude">
+        <button class="btn" id="locate-coords">Use</button>
+      </div>
+    </details>
+    <p class="msg" id="locmsg"></p>
+    <div class="row">
+      <label for="airport">Airport</label>
+      <select id="airport" style="max-width: 260px"></select>
+    </div>
+    <div class="row">
+      <label for="timezone">Time zone</label>
+      <select id="timezone" style="max-width: 260px"></select>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-mode">
+    <h2 id="h-mode">What the sign shows</h2>
+    <div class="row">
+      <span>Mode</span>
+      <div class="seg" role="group" aria-label="Mode">
+        <button id="mode-clock" data-mode="clock">Clock + planes</button>
+        <button id="mode-plane" data-mode="plane">Planes only</button>
+      </div>
+    </div>
+    <p class="hint">Clock + planes shows the time and switches to the flight while a plane is audible. Planes only stays dark between planes. The middle button on the clock switches too.</p>
+    <div class="row">
+      <label for="display">For each plane, show</label>
+      <select id="display" style="max-width: 260px">
+        <option value="city">City: DENVER</option>
+        <option value="codes">Codes: DEN &gt; MSP</option>
+        <option value="airline">Airline: DELTA DEN &gt; MSP</option>
+        <option value="full">Full: DELTA 1902 DENVER &gt; MINNEAPOLIS A321</option>
+      </select>
+    </div>
+    <p class="hint">City is where a landing plane came from, or where a departing plane is going. The left button on the clock cycles these.</p>
+    <div class="row">
+      <label for="clock_24h">24-hour clock</label>
+      <span class="switch"><input type="checkbox" id="clock_24h"><span></span></span>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-alerts">
+    <h2 id="h-alerts">Alerts</h2>
+    <div class="row"><label for="rare_alerts">Rare aircraft in gold with a sparkle <span class="hint">(747, A380, Dreamliner, military, helicopters, vintage)</span></label>
+      <span class="switch"><input type="checkbox" id="rare_alerts"><span></span></span></div>
+    <div class="row"><label for="rare_chime">Chime for rare aircraft <span class="hint">(never during quiet hours)</span></label>
+      <span class="switch"><input type="checkbox" id="rare_chime"><span></span></span></div>
+    <div class="row"><label for="inbound_countdown">Inbound countdown <span class="hint">(a plane icon and seconds until the next plane is audible)</span></label>
+      <span class="switch"><input type="checkbox" id="inbound_countdown"><span></span></span></div>
+    <div class="row"><label for="recap">Evening recap of the day's planes</label>
+      <div class="pair" style="grid-template-columns: auto auto"><select id="recap_hour" aria-label="Recap time"></select>
+      <span class="switch"><input type="checkbox" id="recap"><span></span></span></div></div>
+  </section>
+
+  <section aria-labelledby="h-rot">
+    <h2 id="h-rot">Clock screen extras</h2>
+    <p class="hint">In clock mode, show these for a few seconds every so often. Leave them all off for just the time.</p>
+    <div class="checks" id="rotation">
+      <label><input type="checkbox" value="indoor"> Indoor temperature</label>
+      <label><input type="checkbox" value="outdoor"> Outdoor weather</label>
+      <label><input type="checkbox" value="date"> Date</label>
+      <label><input type="checkbox" value="sun"> Sunrise and sunset</label>
+      <label><input type="checkbox" value="flow"> Planes over you today</label>
+      <label><input type="checkbox" value="today"> Planes heard today</label>
+    </div>
+    <div class="row"><label for="rotate_every_s">Every</label><span class="val" id="v-rotate_every_s"></span></div>
+    <input type="range" id="rotate_every_s" min="20" max="600" step="10">
+    <div class="row">
+      <label for="units">Temperatures in</label>
+      <div class="seg" role="group" aria-label="Temperature units">
+        <button data-units="F">°F</button><button data-units="C">°C</button>
+      </div>
+    </div>
+    <div class="row"><label for="temp_offset_c">Indoor sensor correction <span class="hint">(the clock warms its own sensor a little)</span></label><span class="val" id="v-temp_offset_c"></span></div>
+    <input type="range" id="temp_offset_c" min="-10" max="5" step="0.5">
+  </section>
+
+  <section aria-labelledby="h-colors">
+    <h2 id="h-colors">Colors</h2>
+    <div class="row"><label for="clock_color">Clock color</label><input type="color" id="clock_color"></div>
+    <div class="row">
+      <label for="airline_colors">Planes in airline colors <span class="hint">(Delta red, Sun Country orange, United blue…)</span></label>
+      <span class="switch"><input type="checkbox" id="airline_colors"><span></span></span>
+    </div>
+    <div class="row"><label for="plane_color">Plane color <span class="hint">(other airlines, or all planes when airline colors are off)</span></label><input type="color" id="plane_color"></div>
+  </section>
+
+  <section aria-labelledby="h-bright">
+    <h2 id="h-bright">Brightness and text</h2>
+    <div class="row">
+      <label for="brightness">Brightness</label>
+      <select id="brightness" style="max-width: 220px">
+        <option value="auto">Auto, follows the room light</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+    <p class="hint">The right button on the clock cycles brightness. Auto moves between the two levels below.</p>
+    <div class="row"><label for="bright_min">In a dark room</label><span class="val" id="v-bright_min"></span></div>
+    <input type="range" id="bright_min" min="1" max="120">
+    <div class="row"><label for="bright_max">In daylight</label><span class="val" id="v-bright_max"></span></div>
+    <input type="range" id="bright_max" min="10" max="255">
+    <div class="row"><label for="scroll_speed">Scroll speed</label><span class="val" id="v-scroll_speed"></span></div>
+    <input type="range" id="scroll_speed" min="8" max="45" step="1">
+    <div class="row">
+      <label for="preview">Try some text on the sign</label>
+      <div class="pair" style="flex: 1 1 240px"><input type="text" id="preview" value="SAN FRANCISCO" maxlength="40"><button class="btn" id="previewbtn">Show</button></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-quiet">
+    <h2 id="h-quiet">Quiet hours</h2>
+    <div class="row">
+      <span>No plane alerts from</span>
+      <div class="pair" style="grid-template-columns: 1fr auto 1fr; flex: 1 1 240px">
+        <select id="quiet_start" aria-label="Quiet hours start"></select><span class="hint">to</span>
+        <select id="quiet_end" aria-label="Quiet hours end"></select>
+      </div>
+    </div>
+    <p class="hint">During quiet hours the clock keeps showing the time but checks for no planes, which saves the free data allowance for daytime. Choose the same hour twice to turn quiet hours off.</p>
+  </section>
+
+  <section aria-labelledby="h-sens">
+    <h2 id="h-sens">Sensitivity</h2>
+    <div class="row"><label for="on_db">Show a plane when it's louder than</label><span class="val" id="v-on_db"></span></div>
+    <input type="range" id="on_db" min="50" max="72" step="1">
+    <p class="hint">60 dBA is a plane you'd clearly notice over a quiet street (about 45 dBA). Raise it if the sign lights before you hear the plane; lower it if it misses planes you notice.</p>
+    <div class="row"><label for="daily_budget">Flight data requests per day</label><span class="val" id="v-daily_budget"></span></div>
+    <input type="range" id="daily_budget" min="100" max="480" step="10">
+    <p class="hint">The free flight feed allows about 500 a day per home internet connection. Keep it lower if two clocks share one connection.</p>
+    <div class="row"><label for="smart_polling">Save requests when planes are elsewhere <span class="hint">(wind sends them away, or hours that are usually quiet)</span></label>
+      <span class="switch"><input type="checkbox" id="smart_polling"><span></span></span></div>
+  </section>
+
+  <section aria-labelledby="h-now">
+    <h2 id="h-now">Nearby and recent</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Flight</th><th>Type</th><th class="num">Miles</th><th class="num">Above you</th><th class="num">dBA</th></tr></thead>
+      <tbody id="planes"></tbody>
+    </table></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Heard at</th><th>Flight</th><th>From or to</th><th class="num">Peak dBA</th><th class="num">Seconds</th></tr></thead>
+      <tbody id="passes"></tbody>
+    </table></div>
+  </section>
+
+  <section aria-labelledby="h-net">
+    <h2 id="h-net">Wi-Fi and security</h2>
+    <div class="kv" id="netinfo"></div>
+    <label for="newpw" class="hint">Change the admin password (8 or more characters). Forgot it? Hold the clock's middle button for 2 seconds and it scrolls the address and password.</label>
+    <div class="pair"><input type="password" id="newpw" autocomplete="new-password" minlength="8"><button class="btn" id="pwbtn">Change</button></div>
+    <p class="msg" id="pwmsg"></p>
+    <div class="confirm" id="forgetbox"></div>
+  </section>
+  <p class="hint" style="text-align:center">Overhead is open source (MIT). Flight data adsb.lol (ODbL) · airports OurAirports ·
+    maps © OpenStreetMap contributors · elevation and time zone Open-Meteo (CC BY 4.0) · weather NOAA aviationweather.gov.
+    Not for navigation.</p>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let demo = false, settings = null, status = null;
+
+  // ---------------- sample data for the demo (used when the page isn't served by a clock)
+  const SAMPLE_SETTINGS = { mode: "clock", clock_24h: false, quiet_start: 23, quiet_end: 6, clock_color: "#FFAA6E",
+    plane_color: "#FF7800", airline_colors: true, bright_min: 6, bright_max: 90, scroll_speed: 20,
+    on_db: 60, off_db: 57, cal_offset: 0, daily_budget: 450, brightness: "auto", display: "city",
+    airport: "auto", timezone: "America/Chicago", rare_alerts: true, rare_chime: false, inbound_countdown: false,
+    recap: false, recap_hour: 20, rotation: [], rotate_every_s: 60, units: "F", temp_offset_c: -4, smart_polling: true };
+  const SAMPLE_STATUS = { version: "1.0", mode: "clock", quiet: false, sign: "", sign_db: 0, sign_color: "#FF0A14",
+    wifi: { ssid: "Sample Home Wi-Fi", rssi: -58, ip: "192.168.1.42" },
+    feed: { calls_today: 212, budget: 450, next_poll_s: 37, error: "" },
+    location: { set: true, address: "4100 Example Ave S, Minneapolis, MN 55416", lat: 44.93, lon: -93.34, elev_ft: 912, timezone: "America/Chicago", lookup: "idle", message: "" },
+    airport: { iata: "MSP", city: "Minneapolis", auto: true, dist_nm: 5.2, nearby: [ { iata: "MSP", city: "Minneapolis", dist_nm: 5.2 }, { iata: "STP", city: "St Paul", dist_nm: 8.9 } ] },
+    weather: { ok: true, temp_c: 7.2, wind_dir: 120, wind_kt: 11, gust_kt: 0, cover: "FEW", raw: "METAR KMSP 191753Z 12011KT 10SM FEW250 07/03 A3028", flow: "LANDINGS OVER YOU", runway: "12R" },
+    indoor: { temp_c: 21.5, rh: 38 },
+    today: { planes: 41, arrivals: 41, departures: 0, farthest_city: "Amsterdam", farthest_mi: 4170, loudest_type: "A333", loudest_db: 82.4,
+             rare: ["A350 DAL39 09:12", "747 UPS2 13:40"], by_hour: [0,0,0,0,0,0,2,5,4,3,4,3,2,3,4,3,3,2,1,1,0,0,0,0] },
+    usual_by_hour: [0,0,0,0,0,0.4,2.1,4.2,3.8,3.1,3.4,3.0,2.6,2.9,3.3,3.7,4.1,3.6,2.8,2.2,1.4,0.6,0.2,0], usual_days: 12, inbound_s: -1,
+    planes: [ { cs: "DAL2159", type: "B739", dist_nm: 2.1, agl_ft: 2350, db: 54.8, dep: false },
+              { cs: "SKW3829", type: "CRJ9", dist_nm: 6.4, agl_ft: 3700, db: 31.2, dep: false } ],
+    passes: [ { t: 0, cs: "SCX284", type: "B738", city: "Seattle", peak: 76.9, agl_ft: 1567, secs: 29 },
+              { t: 0, cs: "DAL2820", type: "BCS1", city: "Charlotte", peak: 60.9, agl_ft: 1645, secs: 14 } ] };
+
+  async function api(path, body) {
+    if (demo) return demoApi(path, body);
+    const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-Overhead": "1" }, body: JSON.stringify(body) };
+    const r = await fetch(path, opt);
+    const data = r.status === 204 ? {} : await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `The clock answered ${r.status}`);
+    return data;
+  }
+  function demoApi(path, body) {
+    if (path === "/api/settings" && body) { Object.assign(settings, body); return Promise.resolve(settings); }
+    if (path === "/api/settings") return Promise.resolve(structuredClone(SAMPLE_SETTINGS));
+    if (path === "/api/status") return Promise.resolve(status || structuredClone(SAMPLE_STATUS));
+    if (path === "/api/locate") {
+      status.location.lookup = "pending";
+      setTimeout(() => { Object.assign(status.location, { lookup: "ok", address: body.address || "", message: body.address ? body.address.toUpperCase() : "Coordinates saved" }); }, 1200);
+      return Promise.resolve({ lookup: "pending" });
+    }
+    if (path === "/api/preview") { previewUntil = Date.now() + 10000; previewText = body.text.toUpperCase(); return Promise.resolve({}); }
+    if (path === "/api/password") { if ((body.password || "").length < 8) return Promise.reject(new Error("Use 8 to 64 characters.")); return Promise.resolve({ ok: true }); }
+    return Promise.resolve({ ok: true });
+  }
+
+  let toastTimer;
+  function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 1600); }
+
+  // ---------------- settings form
+  for (const id of ["quiet_start", "quiet_end", "recap_hour"]) {
+    const sel = $(id);
+    for (let h = 0; h < 24; h++) {
+      const o = document.createElement("option");
+      o.value = h;
+      o.textContent = new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" });
+      sel.append(o);
+    }
+  }
+  const pct = v => Math.round(v / 255 * 100) + "%";
+  const fmt = { bright_min: pct, bright_max: pct, scroll_speed: v => v + " px/s", on_db: v => v + " dBA", daily_budget: v => String(v),
+               rotate_every_s: v => v < 120 ? v + " s" : (v / 60).toFixed(v % 60 ? 1 : 0) + " min",
+               temp_offset_c: v => (v > 0 ? "+" : "") + v + " °C" };
+
+  function fill() {
+    const s = settings;
+    for (const b of document.querySelectorAll(".seg button[data-mode]")) b.setAttribute("aria-pressed", b.dataset.mode === s.mode);
+    $("clock_24h").checked = s.clock_24h;
+    $("airline_colors").checked = s.airline_colors;
+    $("clock_color").value = s.clock_color.toLowerCase();
+    $("plane_color").value = s.plane_color.toLowerCase();
+    for (const k of ["bright_min", "bright_max", "scroll_speed", "on_db", "daily_budget", "rotate_every_s", "temp_offset_c"]) { $(k).value = s[k]; $("v-" + k).textContent = fmt[k](s[k]); }
+    $("display").value = s.display;
+    $("brightness").value = s.brightness;
+    $("airport").value = s.airport;
+    fillTimezones(s.timezone);
+    for (const k of ["rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling"]) $(k).checked = s[k];
+    $("recap_hour").value = s.recap_hour;
+    for (const c of $("rotation").querySelectorAll("input")) c.checked = s.rotation.includes(c.value);
+    for (const b of document.querySelectorAll(".seg button[data-units]")) b.setAttribute("aria-pressed", b.dataset.units === s.units);
+    $("quiet_start").value = s.quiet_start;
+    $("quiet_end").value = s.quiet_end;
+  }
+
+  let saveTimer, pending = {};
+  function save(patch) {
+    Object.assign(settings, patch);
+    Object.assign(pending, patch);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const body = pending; pending = {};
+      try { settings = await api("/api/settings", body); fill(); toast("Saved"); }
+      catch (e) { toast(e.message); }
+    }, 350);
+  }
+  for (const b of document.querySelectorAll(".seg button[data-mode]")) b.onclick = () => { save({ mode: b.dataset.mode }); fill(); };
+  for (const k of ["clock_24h", "airline_colors", "rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling"])
+    $(k).onchange = e => save({ [k]: e.target.checked });
+  $("recap_hour").onchange = e => save({ recap_hour: Number(e.target.value) });
+  $("rotation").onchange = () => save({ rotation: [...$("rotation").querySelectorAll("input:checked")].map(c => c.value) });
+  for (const b of document.querySelectorAll(".seg button[data-units]")) b.onclick = () => { save({ units: b.dataset.units }); fill(); };
+  for (const k of ["clock_color", "plane_color"]) $(k).oninput = e => save({ [k]: e.target.value.toUpperCase() });
+  for (const k of ["bright_min", "bright_max", "scroll_speed", "on_db", "daily_budget", "rotate_every_s", "temp_offset_c"])
+    $(k).oninput = e => { const v = Number(e.target.value); $("v-" + k).textContent = fmt[k](v); save(k === "on_db" ? { on_db: v, off_db: v - 3 } : { [k]: v }); };
+  for (const k of ["display", "brightness", "airport", "timezone"]) $(k).onchange = e => save({ [k]: e.target.value });
+
+  function fillTimezones(current) {
+    const sel = $("timezone");
+    if (sel.options.length) { sel.value = current; return; }
+    let zones = [];
+    try { zones = Intl.supportedValuesOf("timeZone"); } catch (e) {}
+    if (!zones.includes(current)) zones.unshift(current);
+    for (const z of zones) { const o = document.createElement("option"); o.value = o.textContent = z; sel.append(o); }
+    sel.value = current;
+  }
+  function fillAirports(ap) {
+    const sel = $("airport"), want = settings ? settings.airport : "auto";
+    const key = JSON.stringify(ap.nearby || []) + ap.iata;
+    if (sel.dataset.key === key) return;
+    sel.dataset.key = key;
+    sel.replaceChildren();
+    const auto = document.createElement("option");
+    auto.value = "auto";
+    auto.textContent = ap.auto && ap.iata ? `Nearest (${ap.iata} ${ap.city})` : "Nearest";
+    sel.append(auto);
+    for (const a of ap.nearby || []) {
+      const o = document.createElement("option");
+      o.value = a.iata;
+      o.textContent = `${a.iata} ${a.city}, ${(a.dist_nm * 1.15078).toFixed(0)} mi`;
+      sel.append(o);
+    }
+    sel.value = want;
+  }
+  for (const k of ["quiet_start", "quiet_end"]) $(k).onchange = e => save({ [k]: Number(e.target.value) });
+
+  // ---------------- location
+  let lookingUp = false;
+  $("locate").onclick = async () => {
+    const address = $("address").value.trim();
+    try { await api("/api/locate", { address }); lookingUp = true; showLoc(); }
+    catch (e) { setMsg("locmsg", e.message, "bad"); }
+  };
+  $("locate-coords").onclick = async () => {
+    const lat = parseFloat($("lat").value), lon = parseFloat($("lon").value);
+    if (!isFinite(lat) || !isFinite(lon)) { setMsg("locmsg", "Enter latitude and longitude as numbers, like 44.93 and -93.34.", "bad"); return; }
+    try { await api("/api/locate", { lat, lon }); lookingUp = true; showLoc(); }
+    catch (e) { setMsg("locmsg", e.message, "bad"); }
+  };
+  function setMsg(id, text, cls) { const el = $(id); el.textContent = text; el.className = "msg " + (cls || ""); }
+  function showLoc() {
+    const L = status.location;
+    const busy = L.lookup === "pending" || lookingUp && L.lookup === "idle";
+    $("locate").disabled = $("locate-coords").disabled = busy;
+    if (busy) { setMsg("locmsg", "Looking up the address…"); return; }
+    if (L.lookup === "failed") { lookingUp = false; setMsg("locmsg", L.message, "bad"); return; }
+    if (!L.set) { setMsg("locmsg", "Not set yet. Planes won't show until the address is looked up.", "warn"); return; }
+    lookingUp = false;
+    const A = status.airport;
+    if (!A.iata) { setMsg("locmsg", L.message || "No airport with scheduled flights nearby, so planes overhead will be too high to hear.", "warn"); return; }
+    const miles = (A.dist_nm * 1.15078).toFixed(1);
+    const far = A.dist_nm > 25;
+    setMsg("locmsg", `${L.lookup === "ok" && L.message ? "Found " + L.message + ". " : ""}${miles} miles from ${A.iata} (${A.city}), ground ${Math.round(L.elev_ft)} ft above sea level.` +
+      (far ? " That's quite far from the airport, so planes will mostly be too high to hear." : ""), far ? "warn" : "ok");
+  }
+
+  // ---------------- status
+  function tempText(c) { return c == null ? "—" : settings && settings.units === "C" ? Math.round(c) + "°C" : Math.round(c * 9 / 5 + 32) + "°F"; }
+  function renderDashboard(s) {
+    const T = s.today || {};
+    $("t-planes").textContent = T.planes ?? 0;
+    $("t-farthest").textContent = T.farthest_city || "—";
+    $("t-farthest-sub").textContent = T.farthest_city ? `farthest, ${Number(T.farthest_mi).toLocaleString()} mi` : "farthest";
+    $("t-loudest").textContent = T.loudest_type || "—";
+    $("t-loudest-sub").textContent = T.loudest_type ? `loudest, ${T.loudest_db.toFixed(0)} dBA` : "loudest";
+    const hours = $("hours"), today = T.by_hour || [], usual = s.usual_by_hour || [];
+    const max = Math.max(1, ...today, ...usual);
+    if (!hours.children.length) for (let h = 0; h < 24; h++) hours.append(Object.assign(document.createElement("div"), { innerHTML: "<u></u><i></i>" }));
+    [...hours.children].forEach((d, h) => {
+      d.querySelector("u").style.height = ((usual[h] || 0) / max * 100) + "%";
+      d.querySelector("i").style.height = ((today[h] || 0) / max * 100) + "%";
+      d.title = `${h}:00  today ${today[h] || 0}, usual ${usual[h] || 0}`;
+    });
+    $("t-hours-hint").textContent = s.usual_days >= 7 ? "Orange bars are today; grey bars are a usual day for this house."
+      : `Orange bars are today. A usual day appears in grey after a week (${s.usual_days || 0} of 7 days so far).`;
+    $("t-rare").textContent = (T.rare || []).length ? "Rare today: " + T.rare.join(", ") : "";
+    const W = s.weather || {};
+    if (W.ok) {
+      const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      const wind = W.wind_kt >= 3 ? `wind ${W.wind_dir >= 0 ? dirs[Math.round(W.wind_dir / 45) % 8] : "variable"} ${Math.round(W.wind_kt * 1.15078)} mph` : "calm";
+      $("wx-line").textContent = `${s.airport.iata}: ${tempText(W.temp_c)}, ${wind}` + (s.indoor ? ` · inside ${tempText(s.indoor.temp_c)}, ${Math.round(s.indoor.rh)}%` : "");
+      $("wx-raw").textContent = W.raw || "";
+    } else {
+      $("wx-line").textContent = s.indoor ? `Inside ${tempText(s.indoor.temp_c)}, ${Math.round(s.indoor.rh)}%` : "No weather report yet.";
+      $("wx-raw").textContent = "";
+    }
+    const over = W.flow === "LANDINGS OVER YOU" || W.flow === "TAKEOFFS OVER YOU";
+    $("wx-flow").textContent = W.flow ? W.flow.charAt(0) + W.flow.slice(1).toLowerCase() + (W.runway ? " (" + W.runway + ")" : "") : "Flow unknown";
+    $("wx-flow").className = "badge " + (over ? "on" : "off");
+  }
+
+  function renderStatus() {
+    const s = status;
+    renderDashboard(s);
+    const chip = $("chip");
+    chip.textContent = s.quiet ? "Quiet hours" : !s.location.set ? "Needs an address" : s.feed.error ? "Can't reach flight data" : "Watching for planes";
+    chip.className = "chip " + (!s.location.set || s.feed.error ? "warn" : "ok");
+    if (document.activeElement !== $("address") && !$("address").value) $("address").value = s.location.address || "";
+    showLoc();
+    fillAirports(s.airport);
+    $("signtext").textContent = s.sign ? `Showing ${s.sign}` : settings && settings.mode === "clock" ? "Showing the time" : "Dark until a plane is audible";
+    $("signdb").textContent = s.sign ? `${s.sign_db.toFixed(1)} dBA` : "";
+    const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    $("planes").innerHTML = s.planes.length ? s.planes.map(p => `<tr><td>${esc(p.cs || "?")}</td><td>${esc(p.type)}</td><td class="num">${(p.dist_nm * 1.15078).toFixed(1)}</td><td class="num">${Math.round(p.agl_ft).toLocaleString()} ft</td><td class="num">${p.db.toFixed(1)}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="hint">No aircraft nearby right now.</td></tr>`;
+    $("passes").innerHTML = s.passes.length ? s.passes.map(p => `<tr><td>${p.t ? new Date(p.t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "earlier"}</td><td>${esc(p.cs)}</td><td>${esc(p.city || "—")}</td><td class="num">${p.peak.toFixed(1)}</td><td class="num">${Math.round(p.secs)}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="hint">No audible planes yet today.</td></tr>`;
+    const bars = s.wifi.rssi > -60 ? "strong" : s.wifi.rssi > -72 ? "fair" : "weak";
+    $("netinfo").innerHTML = "";
+    for (const [k, v] of [["Network", s.wifi.ssid], ["Signal", `${bars} (${s.wifi.rssi} dBm)`], ["Clock's address", s.wifi.ip],
+                          ["Flight data today", `${s.feed.calls_today} of ${s.feed.budget} requests`], ["Firmware", s.version]]) {
+      const a = document.createElement("span"); a.textContent = k;
+      const b = document.createElement("span"); b.textContent = v;
+      $("netinfo").append(a, b);
+    }
+  }
+  async function poll() {
+    try { status = await api("/api/status"); renderStatus(); } catch (e) { $("chip").textContent = "Lost connection"; $("chip").className = "chip warn"; }
+    setTimeout(poll, lookingUp ? 1000 : 3000);
+  }
+
+  // ---------------- preview / password / Wi-Fi
+  let previewUntil = 0, previewText = "";
+  $("previewbtn").onclick = async () => {
+    try { await api("/api/preview", { text: $("preview").value, color: settings.airline_colors ? "#FF0A14" : settings.plane_color }); previewUntil = Date.now() + 10000; previewText = $("preview").value.toUpperCase(); toast("On the sign for 10 seconds"); }
+    catch (e) { toast(e.message); }
+  };
+  $("pwbtn").onclick = async () => {
+    try { await api("/api/password", { password: $("newpw").value }); $("newpw").value = ""; setMsg("pwmsg", "Password changed. Your browser will ask for the new one next time.", "ok"); }
+    catch (e) { setMsg("pwmsg", e.message, "bad"); }
+  };
+  function renderForget(confirming) {
+    const box = $("forgetbox");
+    box.replaceChildren();
+    const mk = (cls, text, fn) => { const b = document.createElement("button"); b.className = cls; b.textContent = text; b.onclick = fn; return b; };
+    if (!confirming) { box.append(mk("btn danger", "Forget Wi-Fi…", () => renderForget(true))); return; }
+    const m = document.createElement("span");
+    m.className = "msg warn";
+    m.textContent = "The clock will restart and show its setup network. Continue?";
+    box.append(m,
+      mk("btn danger", "Forget Wi-Fi", async () => {
+        try { await api("/api/wifi/forget", {}); box.textContent = "Restarting. Join the clock's setup network to connect it again."; }
+        catch (e) { toast(e.message); }
+      }),
+      mk("btn", "Cancel", () => renderForget(false)));
+  }
+  renderForget(false);
+
+  // ---------------- live sign replica (clock, preview, or current plane)
+  const BIG = {}, src = "20:0000000000 2D:0808080808 2E:0000606000 2F:2010080402 30:3E5149453E 31:00427F4000 32:7249494946 33:2141494D33 34:1814127F10 35:2745454539 36:3C4A494931 37:4121110907 38:3649494936 39:464949291E 3A:0000140000 3E:0041221408 3F:0201590906 41:7C1211127C 42:7F49494936 43:3E41414122 44:7F4141413E 45:7F49494941 46:7F09090901 47:3E41415173 48:7F0808087F 49:00417F4100 4A:2040413F01 4B:7F08142241 4C:7F40404040 4D:7F021C027F 4E:7F0408107F 4F:3E4141413E 50:7F09090906 51:3E4151215E 52:7F09192946 53:2649494932 54:03017F0103 55:3F4040403F 56:1F2040201F 57:3F4038403F 58:6314081463 59:0304780403 5A:61594D4543";
+  for (const t of src.split(" ")) { const [c, h] = t.split(":"); BIG[String.fromCharCode(parseInt(c, 16))] = [0, 2, 4, 6, 8].map(i => parseInt(h.substr(i, 2), 16)); }
+  function cols(text) {
+    const out = [];
+    for (const ch of text.toUpperCase()) {
+      if (ch === " ") { out.push(0, 0, 0); continue; }
+      const g = BIG[ch] || BIG["?"]; let lo = g.findIndex(c => c), hi = 4;
+      while (hi > lo && !g[hi]) hi--; if (lo < 0) lo = hi = 0;
+      out.push(...g.slice(lo, hi + 1), 0);
+    }
+    if (out.length && !out[out.length - 1]) out.pop();
+    return out;
+  }
+  const cv = $("led"), ctx = cv.getContext("2d"), P = cv.width / 32;
+  let shownText = "", t0 = 0;
+  function frame() {
+    const now = Date.now();
+    let text = "", color = settings ? settings.clock_color : "#FFAA6E", c = null;
+    if (now < previewUntil) { text = previewText; color = settings && !settings.airline_colors ? settings.plane_color : "#FF0A14"; }
+    else if (status && status.sign) { text = status.sign; color = status.sign_color; }
+    if (text !== shownText) { shownText = text; t0 = now; }
+    let f = new Array(32).fill(0);
+    if (text) {
+      c = cols(text);
+      const cyc = Math.max(c.length + 12, 36), t = Math.max(0, (now - t0) / 1000 - 1.2), off = Math.floor(t * (settings ? settings.scroll_speed : 20)) % cyc;
+      for (let i = 0; i < 32; i++) { const k = (off + i) % cyc; f[i] = k < c.length ? c[k] : 0; }
+    } else if (!settings || settings.mode === "clock") {
+      const d = new Date(), h = settings && settings.clock_24h ? String(d.getHours()).padStart(2, "0") : String((d.getHours() + 11) % 12 + 1);
+      c = [...cols(h), 0, Math.floor(now / 1000) % 2 ? 0 : 0x14, 0, ...cols(String(d.getMinutes()).padStart(2, "0"))];
+      const pad = (32 - c.length) >> 1; c.forEach((v, i) => f[pad + i] = v);
+    }
+    const off = getComputedStyle(document.documentElement).getPropertyValue("--off");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (let x = 0; x < 32; x++) for (let y = 0; y < 8; y++) {
+      const on = (f[x] >> y) & 1;
+      ctx.fillStyle = on ? color : off; ctx.shadowColor = color; ctx.shadowBlur = on ? P * 0.5 : 0;
+      ctx.fillRect(x * P + P * 0.09, y * P + P * 0.09, P * 0.82, P * 0.82);
+    }
+    ctx.shadowBlur = 0;
+    requestAnimationFrame(frame);
+  }
+
+  // ---------------- start
+  (async () => {
+    try { settings = await api("/api/settings"); }
+    catch (e) { demo = true; $("demo").hidden = false; settings = structuredClone(SAMPLE_SETTINGS); status = structuredClone(SAMPLE_STATUS); }
+    fill();
+    requestAnimationFrame(frame);
+    poll();
+  })();
+})();
+</script>

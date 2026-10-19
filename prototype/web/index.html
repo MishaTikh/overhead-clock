@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MSP Overhead</title>
+<style>
+  :root {
+    --bg: #101214; --panel: #181b1f; --line: #2a2f35; --text: #d8dde3; --muted: #8a939d;
+    --led: #ff3b1f; --led-glow: rgba(255, 59, 31, .55); --led-off: #2a1512;
+    --accent: #ffb020; --ok: #4cc38a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 15px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 16px; }
+
+  /* --- the sign: Ulanzi TC001 --- */
+  .device { background: linear-gradient(#e9e9e6, #cfcfcb); border-radius: 14px; padding: 14px 16px;
+            box-shadow: 0 12px 30px rgba(0,0,0,.55), inset 0 1px 0 #fff; max-width: 760px; margin: 0 auto; }
+  .face { background: #0a0a0a; border-radius: 6px; padding: 10px;
+          box-shadow: inset 0 0 0 1px #000, inset 0 2px 6px rgba(0,0,0,.8); }
+  .grid32 { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; }
+  .dot { aspect-ratio: 1; border-radius: 1px; background: #141414; }
+  .dot.on { background: var(--led); box-shadow: 0 0 5px 0 var(--led-glow); }
+  .buttons { display: flex; justify-content: center; gap: 10px; margin-top: 8px; }
+  .buttons i { width: 22px; height: 5px; border-radius: 3px; background: #b9b9b5; }
+  .modes button { margin-left: 6px; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+                  border-radius: 6px; padding: 4px 10px; font: inherit; cursor: pointer; }
+  .modes button.sel { border-color: var(--accent); color: var(--accent); }
+  .signmeta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+  /* --- panels --- */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+  .card h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  canvas { width: 100%; aspect-ratio: 1; display: block; background: #0d0f11; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num, th.num { text-align: right; }
+  tr.aud td { color: var(--accent); }
+  .scroll { overflow-x: auto; }
+  .meter { height: 10px; background: #0d0f11; border-radius: 5px; overflow: hidden; position: relative; margin: 8px 0 4px; }
+  .meter i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--ok), var(--accent), var(--led)); }
+  .meter b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff; opacity: .6; }
+  .now { font-size: 22px; font-weight: 600; min-height: 32px; }
+  .sub { color: var(--muted); font-size: 12.5px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12.5px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .err { color: var(--led); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Overhead prototype · MSP simulator</h1>
+
+  <div class="device" aria-label="Ulanzi TC001 8 by 32 LED matrix mock-up">
+    <div class="face"><div class="grid32" id="matrix"></div></div>
+    <div class="buttons"><i></i><i></i><i></i></div>
+  </div>
+  <div class="signmeta">
+    <span id="signtext">dark — nothing audible</span>
+    <span class="modes">Mode
+      <button data-m="clock">Clock</button><button data-m="plane">Planes only</button>
+    </span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Overhead now</h2>
+      <div class="now" id="now">—</div>
+      <div class="sub" id="nowsub">&nbsp;</div>
+      <div class="meter"><i id="meter"></i><b id="thr"></b></div>
+      <div class="sub" id="meterlbl">&nbsp;</div>
+      <h2 style="margin-top:16px">Feed</h2>
+      <div class="kv" id="feed"></div>
+    </div>
+    <div class="card">
+      <h2>Radar · 8 nm</h2>
+      <canvas id="radar" width="600" height="600"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Nearby aircraft (dead-reckoned to now)</h2>
+    <div class="scroll"><table id="planes"></table></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h2>Recent audible passes (also logged to passes.csv)</h2>
+    <div class="scroll"><table id="passes"></table></div>
+  </div>
+</main>
+
+<script>
+const W = 32, H = 8;
+const matrix = document.getElementById('matrix');
+const dots = [];  // dots[x][y]
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+  const d = document.createElement('div'); d.className = 'dot'; matrix.appendChild(d);
+  (dots[x] ||= [])[y] = d;
+}
+
+let lastColor = '';
+function setLed(c) {
+  if (c === lastColor) return; lastColor = c;
+  const s = document.documentElement.style;
+  s.setProperty('--led', c);
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+  s.setProperty('--led-glow', `rgba(${r},${g},${b},.6)`);
+}
+
+let lastHex = '';
+function drawFrame(f, bright, color) {
+  if (color) setLed(color);
+  matrix.style.filter = bright > 0 ? `brightness(${0.55 + 0.6 * bright})` : '';
+  if (f === lastHex) return; lastHex = f;
+  for (let x = 0; x < W; x++) {
+    const col = parseInt(f.substr(x * 2, 2), 16);
+    for (let y = 0; y < H; y++) dots[x][y].classList.toggle('on', !!((col >> y) & 1));
+  }
+}
+
+// --- radar -----------------------------------------------------------------
+const cv = document.getElementById('radar'), ctx = cv.getContext('2d');
+const RANGE = 8;
+const HOME = [44.9483, -93.3749];
+const RWYS = [ // [lat1, lon1, lat2, lon2]
+  [44.88780, -93.23410, 44.87350, -93.20120], [44.89290, -93.22100, 44.88130, -93.19400],
+  [44.87230, -93.23830, 44.89360, -93.20830], [44.88780, -93.24220, 44.86620, -93.23660]];
+function ll2nm(lat, lon) {
+  return [(lon - HOME[1]) * 60 * Math.cos(HOME[0] * Math.PI / 180), (lat - HOME[0]) * 60];
+}
+function px([x, y]) { const s = cv.width / 2 / RANGE; return [cv.width / 2 + x * s, cv.height / 2 - y * s]; }
+
+function drawRadar(planes, onDb) {
+  const c = ctx, w = cv.width;
+  c.clearRect(0, 0, w, w);
+  c.strokeStyle = '#22272d'; c.lineWidth = 1;
+  for (const r of [1, 2, 4, 6, 8]) { c.beginPath(); c.arc(w / 2, w / 2, r * w / 2 / RANGE, 0, 7); c.stroke(); }
+  c.fillStyle = '#5b6570'; c.font = '20px system-ui';
+  for (const r of [2, 4, 8]) c.fillText(r + ' nm', w / 2 + 4, w / 2 - r * w / 2 / RANGE + 20);
+  // extended centerlines for 12L/12R
+  c.setLineDash([6, 8]); c.strokeStyle = '#3a4450';
+  for (const r of RWYS.slice(0, 2)) {
+    const a = px(ll2nm(r[0], r[1])), b = px(ll2nm(r[2], r[3]));
+    const dx = a[0] - b[0], dy = a[1] - b[1], k = 20;
+    c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(a[0] + dx * k, a[1] + dy * k); c.stroke();
+  }
+  c.setLineDash([]); c.strokeStyle = '#8a939d'; c.lineWidth = 5;
+  for (const r of RWYS) { const a = px(ll2nm(r[0], r[1])), b = px(ll2nm(r[2], r[3]));
+    c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.stroke(); }
+  c.fillStyle = '#8a939d'; c.fillText('MSP', ...px([5.6, -2.4]));
+  // house
+  c.fillStyle = '#4cc38a'; c.beginPath(); c.arc(w / 2, w / 2, 7, 0, 7); c.fill();
+  c.lineWidth = 1;
+  for (const p of planes) {
+    const [x, y] = px([p.x_nm, p.y_nm]);
+    if (x < -20 || y < -20 || x > w + 20 || y > w + 20) continue;
+    const t = Math.max(0, Math.min(1, (p.db - (onDb - 20)) / 30));
+    const col = p.audible ? getComputedStyle(document.documentElement).getPropertyValue('--led').trim()
+                          : `rgba(200,210,220,${0.35 + 0.5 * t})`;
+    c.save(); c.translate(x, y); c.rotate(p.trk * Math.PI / 180);
+    c.fillStyle = col; c.beginPath(); c.moveTo(0, -11); c.lineTo(7, 8); c.lineTo(0, 4); c.lineTo(-7, 8); c.closePath(); c.fill();
+    c.restore();
+    c.fillStyle = col; c.font = '18px system-ui';
+    c.fillText(`${p.cs || p.hex} ${Math.round(p.agl / 100)}`, x + 12, y - 4);
+    c.fillStyle = '#8a939d'; c.fillText(`${p.db.toFixed(0)} dB`, x + 12, y + 16);
+  }
+}
+
+let mode = '';
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  fetch('/mode?m=' + b.dataset.m); mode = b.dataset.m; markMode();
+});
+function markMode() { document.querySelectorAll('.modes button').forEach(b => b.classList.toggle('sel', b.dataset.m === mode)); }
+
+const fmtAgo = s => s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`;
+function drawState(s) {
+  const cur = s.current, onDb = s.cfg.on_db;
+  if (s.cfg.mode !== mode) { mode = s.cfg.mode; markMode(); }
+  document.getElementById('signtext').textContent = cur ? `showing "${cur.text}"` : (s.cfg.mode === 'clock' ? 'clock — waiting for a plane' : 'dark — nothing audible');
+  document.getElementById('now').textContent = cur ? cur.text : '—';
+  document.getElementById('nowsub').textContent = cur ? `${cur.cs} · ${cur.type}` : 'Sign is dark';
+  const loud = s.planes[0];
+  const db = loud ? loud.db : 30;
+  const pct = v => Math.max(0, Math.min(100, (v - 30) / 60 * 100));
+  document.getElementById('meter').style.width = pct(db) + '%';
+  document.getElementById('thr').style.left = pct(onDb) + '%';
+  document.getElementById('meterlbl').textContent =
+    loud ? `Loudest: ${loud.cs || loud.hex} ≈ ${loud.db.toFixed(1)} dBA at the house (threshold ${onDb})` : 'No aircraft';
+
+  const f = s.feed, rows = [
+    ['source', f.feed], ['last poll', f.last_poll ? fmtAgo(f.now - f.last_poll) + ' ago' : '—'],
+    ['next poll', f.next_poll ? 'in ' + fmtAgo(Math.max(0, f.next_poll - f.now)) : '—']];
+  if (f.feed === 'adsblol') rows.push(['calls this run', f.calls], ['budget tokens', f.tokens]);
+  if (f.error) rows.push(['error', `<span class="err">${f.error.replace(/</g, '&lt;')}</span>`]);
+  document.getElementById('feed').innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
+
+  document.getElementById('planes').innerHTML =
+    '<tr><th>Flight</th><th>Type</th><th class="num">Dist nm</th><th class="num">Above you ft</th><th class="num">kt</th><th>Phase</th><th class="num">dBA</th><th class="num">Fix age</th></tr>' +
+    s.planes.slice(0, 15).map(p => `<tr class="${p.audible ? 'aud' : ''}"><td>${p.cs || p.hex}</td><td>${p.type || ''} ${p.cat || ''}</td>
+      <td class="num">${Math.hypot(p.x_nm, p.y_nm).toFixed(1)}</td><td class="num">${p.agl.toLocaleString()}</td>
+      <td class="num">${p.gs}</td><td>${p.dep ? 'dep' : 'arr'}</td><td class="num">${p.db.toFixed(1)}</td><td class="num">${p.age}s</td></tr>`).join('');
+  document.getElementById('passes').innerHTML = s.passes.length ?
+    '<tr><th>Time</th><th>Flight</th><th>Type</th><th>City</th><th class="num">Peak dBA</th><th class="num">Above you ft</th><th class="num">Audible s</th></tr>' +
+    s.passes.map(p => `<tr><td>${p.time.slice(11)}</td><td>${p.callsign}</td><td>${p.type}</td><td>${p.city}</td>
+      <td class="num">${p.peak_dba}</td><td class="num">${p.agl_at_closest_ft.toLocaleString()}</td><td class="num">${p.audible_s}</td></tr>`).join('')
+    : '<tr><td class="sub">None yet</td></tr>';
+  drawRadar(s.planes, onDb);
+}
+
+const es = new EventSource('/stream');
+es.addEventListener('frame', e => { const d = JSON.parse(e.data); drawFrame(d.f, d.b, d.c); });
+es.addEventListener('state', e => drawState(JSON.parse(e.data)));
+</script>
+</body>
+</html>

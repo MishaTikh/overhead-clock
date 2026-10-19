@@ -1,0 +1,14 @@
+name: Idea or feature request
+description: Suggest something new
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like the clock to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it be useful or fun?

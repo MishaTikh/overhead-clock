@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: the workflow only reads the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    name: Logic tests (host)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and run
+        working-directory: firmware
+        run: |
+          g++ -std=c++17 -O1 -Wall -Wno-unused-function -Isrc -o host_test \
+            test/host_test.cpp src/overhead.cpp src/render.cpp src/extras.cpp
+          ./host_test test/fixtures/board_sample.html
+
+  firmware:
+    name: Firmware build (TC001)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install "platformio==6.2.0"
+      - name: Build
+        working-directory: firmware
+        run: pio run -e tc001
+      - name: Make a single flashable image
+        working-directory: firmware
+        run: |
+          B=.pio/build/tc001
+          mkdir -p release
+          python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32 merge_bin \
+            -o release/overhead-tc001.bin --flash_mode dio --flash_size 4MB \
+            0x1000 $B/bootloader.bin 0x8000 $B/partitions.bin \
+            0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
+            0x10000 $B/firmware.bin
+          sha256sum release/overhead-tc001.bin | tee release/overhead-tc001.bin.sha256
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: overhead-tc001-${{ github.sha }}
+          path: firmware/release/
+          retention-days: 30
