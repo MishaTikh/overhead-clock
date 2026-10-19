@@ -514,7 +514,6 @@ ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 # Stock media (downloaded by fetch_assets(); not committed). Pexels License: free, no attribution
 # required. Music: CC BY 4.0, credited in the video and in the README.
 MEDIA = {
-    "approach_melbourne.mp4": "https://videos.pexels.com/video-files/36253286/15374391_1920_1080_30fps.mp4",
     "landing_trees.mp4": "https://videos.pexels.com/video-files/12086902/12086902-hd_1920_1080_60fps.mp4",
     "overhead_melbourne.mp4": "https://videos.pexels.com/video-files/36248449/15372581_1920_1080_30fps.mp4",
     "fluffing_a_duck.mp3": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Fluffing%20a%20Duck.mp3",
@@ -601,13 +600,6 @@ def clip(name, start=0.0):
 
 
 # ---------------------------------------------------------------- scenes
-def scene_open(ctx, t):
-    """0-4.5 s: a jet on approach grows in the frame."""
-    paint_footage(ctx, clip("approach_melbourne.mp4", 2.9), t, 4.5, 1.05)
-    shadow_text(ctx, "You hear it", W / 2, H - 230, 96, INK, window(t, 0.4, 4.4, 0.5), tracking=1)
-    shadow_text(ctx, "before you see it.", W / 2, H - 120, 96, AMBER, window(t, 1.4, 4.4, 0.5), tracking=1)
-
-
 def scene_trees(ctx, t):
     """4.5-9.5 s: a Dreamliner low over the trees, real engine sound."""
     lt = t - 4.5
@@ -623,7 +615,7 @@ def scene_overhead(ctx, t):
     if slide > 0:
         cols = frame_cols("DENVER", max(0.0, lt - 1.4), speed=22, hold=0.8)
         draw_device(ctx, W - 520, H - 300 + (1 - slide) * 420, 820, cols, (1.0, 0.47, 0.0), 0.95, alpha=slide)  # default plane color: airline unknown
-    shadow_text(ctx, "Overhead tells you where it came from.", W / 2, 140, 64, INK, window(lt, 1.6, 6.9, 0.5), TEXT_FONT)
+    shadow_text(ctx, "Overhead tells you where it came from, or where it's going.", W / 2, 140, 64, INK, window(lt, 1.6, 6.9, 0.5), TEXT_FONT)
 
 
 def scene_rings(ctx, t):
@@ -676,12 +668,27 @@ def scene_outro2(ctx, t):
     text(ctx, CREDITS, W / 2, H - 46, 20, MUTED, window(t, 40.0, 46.0, 0.6), TEXT_FONT)
 
 
-DURATION = 45.0
-SCENES = [(0, 4.5, scene_open), (4.5, 9.5, scene_trees), (9.5, 16.5, scene_overhead), (16.5, 23, scene_rings),
-          (23, 29, scene_formats2), (29, 33, scene_rare2), (33, 38.5, scene_phone2), (38.5, 46, scene_outro2)]
+# Scene times below are on the original 45 s storyboard; the video keeps these stretches of it
+# (the opening approach shot, the sound-rings diagram and the rare-visitor scene were cut).
+DURATION = 45.0                              # end of the storyboard
+KEEP = [(4.5, 8.7), (9.5, 16.5), (23.0, 29.0), (33.0, 45.0)]  # trees shot ends before the plane hides
+VIDEO_LENGTH = sum(b - a for a, b in KEEP)   # 29.2 s
 
 
-def render(ctx, t):
+def story_time(video_t):
+    for a, b in KEEP:
+        if video_t < b - a:
+            return a + video_t
+        video_t -= b - a
+    return KEEP[-1][1]
+
+
+SCENES = [(4.5, 9.5, scene_trees), (9.5, 16.5, scene_overhead),
+          (23, 29, scene_formats2), (33, 38.5, scene_phone2), (38.5, 46, scene_outro2)]
+
+
+def render(ctx, video_t):
+    t = story_time(video_t)
     for i, (a, b, fn) in enumerate(SCENES):
         if a <= t < b:
             fn(ctx, t)
@@ -690,6 +697,9 @@ def render(ctx, t):
                 ctx.set_source_rgba(0, 0, 0, 1 - clamp(edge / 0.3))
                 ctx.paint()
             break
+    if video_t < 0.6:  # fade in from black
+        ctx.set_source_rgba(0, 0, 0, 1 - clamp(video_t / 0.6))
+        ctx.paint()
     if t > DURATION - 0.8:
         ctx.set_source_rgba(0, 0, 0, clamp((t - (DURATION - 0.8)) / 0.8))
         ctx.paint()
@@ -707,11 +717,10 @@ def decode_audio(path):
 
 
 def soundtrack(path):
+    # effects are placed on the storyboard timeline, then only the KEEP stretches are kept;
+    # the music starts from its own beginning on the video timeline
     n = int(DURATION * SR)
-    t = np.arange(n) / SR
     out = np.zeros(n)
-    music = decode_audio(os.path.join(ASSETS, "fluffing_a_duck.mp3"))[:n]
-    music = np.pad(music, (0, n - len(music)))
     jet = decode_audio(os.path.join(ASSETS, "landing_trees.mp4"))
     jet /= np.abs(jet).max() + 1e-9
 
@@ -727,14 +736,9 @@ def soundtrack(path):
         return env
 
     jet_env = np.zeros(n)
-    jet_env += place(jet, 0.6, 0.55)     # opener: the approach
     jet_env += place(jet, 4.5, 0.95)     # the Dreamliner's own sound
     jet_env += place(jet, 10.6, 0.70)    # the jet overhead
-    jet_env += place(jet, 17.6, 0.80)    # the diagram's flyover
     jet_env = np.convolve(np.clip(jet_env, 0, 1), np.ones(SR // 4) / (SR // 4), mode="same")
-    duck = 1 - 0.55 * jet_env            # music dips under the jets
-    fade = np.clip(t / 0.4, 0, 1) * np.clip((DURATION - t) / 3.0, 0, 1)
-    out += 0.42 * music * duck * fade
     rng = np.random.default_rng(1)
     for k in range(4):                   # button clicks
         c0 = int((23.0 + k * 1.5) * SR)
@@ -743,6 +747,22 @@ def soundtrack(path):
         i0 = int(start * SR)
         k = np.arange(int(dur * SR * 3)) / SR
         out[i0:i0 + len(k)] += 0.16 * np.sin(2 * np.pi * freq * k) * np.exp(-k / dur)
+    def seg(x, a, b):  # one kept stretch, with 40 ms fades so the cuts don't click
+        y = x[int(a * SR):int(b * SR)].copy()
+        f = int(0.04 * SR)
+        y[:f] *= np.linspace(0, 1, f)
+        y[-f:] *= np.linspace(1, 0, f)
+        return y
+
+    out = np.concatenate([seg(out, a, b) for a, b in KEEP])
+    jet_env = np.concatenate([jet_env[int(a * SR):int(b * SR)] for a, b in KEEP])
+    m = len(out)
+    t = np.arange(m) / SR
+    music = decode_audio(os.path.join(ASSETS, "fluffing_a_duck.mp3"))[:m]
+    music = np.pad(music, (0, m - len(music)))
+    duck = 1 - 0.55 * jet_env            # music dips under the jets
+    fade = np.clip(t / 0.4, 0, 1) * np.clip((VIDEO_LENGTH - t) / 3.0, 0, 1)
+    out += 0.42 * music * duck * fade
     out = np.tanh(out * 1.2) * 0.85
     pcm = (out * 32767).astype(np.int16)
     with wave.open(path, "wb") as wf:
@@ -760,7 +780,7 @@ def main():
     ctx = cairo.Context(surface)
     ctx.set_antialias(cairo.ANTIALIAS_BEST)
     if "--stills" in sys.argv:
-        for t in (3.6, 7.0, 13.5, 20.3, 26.0, 30.5, 36.5, 43.0):
+        for t in (2.5, 9.0, 15.0, 21.0, 27.5):
             CLIPS.clear()
             render(ctx, t)
             surface.write_to_png(os.path.join(OUT_DIR, "still_%04.1f.png" % t))
@@ -774,7 +794,7 @@ def main():
            "-i", wav, "-c:v", "libx264", "-preset", "slow", "-crf", "21", "-pix_fmt", "yuv420p",
            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-shortest", OUT_MP4]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    frames = int(DURATION * FPS)
+    frames = int(VIDEO_LENGTH * FPS)
     for i in range(frames):
         render(ctx, i / FPS)
         surface.flush()
@@ -783,6 +803,12 @@ def main():
             print(f"{i}/{frames} frames", flush=True)
     proc.stdin.close()
     proc.wait()
+    for c in CLIPS.values():  # stop the footage readers cleanly
+        if c.gen is not None:
+            try:
+                c.gen.close()
+            except OSError:
+                pass
     os.remove(wav)
     print("wrote", os.path.relpath(OUT_MP4, ROOT))
 
