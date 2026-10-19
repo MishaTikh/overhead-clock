@@ -56,7 +56,7 @@ password, make it long.
   (8 seconds) and back off when a service fails, capped at an hour even if the service asks for longer.
 - **Certificate expiry.** Certificate dates aren't checked by the ESP32's TLS library; the pinned roots still decide
   who is trusted.
-- **Time (NTP)** is unauthenticated. A forged time could shift the clock until the next good sync, but it isn't saved
+- **Time (NTP)** comes from one server you can change on the settings page (Cloudflare's by default) and is unauthenticated. A forged time could shift the clock until the next good sync, but it isn't saved
   into the battery-backed clock unless the two roughly agree.
 
 ### Data
@@ -70,7 +70,7 @@ password, make it long.
 | Street address | US Census geocoder (US addresses) or OpenStreetMap Nominatim | Once, when you look it up. Nothing, if you enter coordinates instead |
 | Location rounded to about 1 km | adsb.lol | With each request for nearby planes |
 | Location rounded to about 1 km | Open-Meteo | Once, for elevation and time zone |
-| Flight numbers | Airport flight board, adsb.lol route data, adsbdb | When a plane is about to be audible |
+| Flight numbers | adsb.lol route data, adsbdb, and mspairport.com if you opt in | When a plane is about to be audible |
 | Airport code | aviationweather.gov | Every 30 minutes |
 
   Requests identify the project (`overhead-clock` and its GitHub address), not the owner. Nothing is logged to the

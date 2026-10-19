@@ -31,6 +31,8 @@ void settings_load() {
     S.units_f = prefs.getBool("units_f", true);
     S.temp_offset_c = prefs.getFloat("t_off", -4.0f);
     S.smart_polling = prefs.getBool("smart", true);
+    S.airport_board = prefs.getBool("board", false);
+    S.ntp_server = prefs.getString("ntp", "time.cloudflare.com").c_str();
     S.mode = prefs.getInt("mode", MODE);
     S.clock_24h = prefs.getInt("h24", CLOCK_24H);
     S.quiet_start = prefs.getInt("q_start", QUIET_START_H);
@@ -71,6 +73,8 @@ void settings_save() {
     prefs.putBool("units_f", S.units_f);
     prefs.putFloat("t_off", S.temp_offset_c);
     prefs.putBool("smart", S.smart_polling);
+    prefs.putBool("board", S.airport_board);
+    prefs.putString("ntp", S.ntp_server.c_str());
     prefs.putInt("mode", S.mode);
     prefs.putInt("h24", S.clock_24h);
     prefs.putInt("q_start", S.quiet_start);
@@ -131,6 +135,8 @@ void settings_to_json(JsonObject o) {
     o["units"] = S.units_f ? "F" : "C";
     o["temp_offset_c"] = S.temp_offset_c;
     o["smart_polling"] = S.smart_polling;
+    o["airport_board"] = S.airport_board;
+    o["ntp_server"] = S.ntp_server.c_str();
     o["scroll_speed"] = S.scroll_speed;
     o["on_db"] = S.on_db;
     o["off_db"] = S.off_db;
@@ -200,6 +206,16 @@ String settings_apply_json(JsonObjectConst in) {
     flag("inbound_countdown", S.inbound_countdown);
     flag("recap", S.recap);
     flag("smart_polling", S.smart_polling);
+    flag("airport_board", S.airport_board);
+    if (in["ntp_server"].is<const char*>()) {
+        String h = in["ntp_server"].as<const char*>();
+        h.trim();
+        h.toLowerCase();
+        bool ok = h.length() >= 3 && h.length() <= 63 && h.indexOf('.') > 0;
+        for (char c : h) ok &= isalnum((unsigned char)c) || c == '.' || c == '-';
+        if (!ok) return "time server must be a host name like time.cloudflare.com";
+        S.ntp_server = h.c_str();
+    }
     if (num("recap_hour", 0, 23, f)) S.recap_hour = (int)f;
     if (num("rotate_every_s", 20, 600, f)) S.rotate_every_s = (int)f;
     if (num("temp_offset_c", -15, 15, f)) S.temp_offset_c = f;

@@ -150,6 +150,11 @@
       <label for="timezone">Time zone</label>
       <select id="timezone" style="max-width: 260px"></select>
     </div>
+    <div class="row" id="board-row" hidden>
+      <label for="airport_board">Use MSP's public flight pages for exact cities <span class="hint">(unofficial, off by default;
+        reads mspairport.com once per audible flight)</span></label>
+      <span class="switch"><input type="checkbox" id="airport_board"><span></span></span>
+    </div>
   </section>
 
   <section aria-labelledby="h-mode">
@@ -290,11 +295,16 @@
     <label for="newpw" class="hint">Change the admin password (8 or more characters). Forgot it? Hold the clock's middle button for 2 seconds and it scrolls the address and password.</label>
     <div class="pair"><input type="password" id="newpw" autocomplete="new-password" minlength="8"><button class="btn" id="pwbtn">Change</button></div>
     <p class="msg" id="pwmsg"></p>
+    <div class="row">
+      <label for="ntp_server">Time server</label>
+      <div class="pair" style="flex: 1 1 240px"><input type="text" id="ntp_server" spellcheck="false" autocapitalize="off"><button class="btn" id="ntpbtn">Save</button></div>
+    </div>
     <div class="confirm" id="forgetbox"></div>
   </section>
-  <p class="hint" style="text-align:center">Overhead is open source (MIT). Flight data adsb.lol (ODbL) · airports OurAirports ·
-    maps © OpenStreetMap contributors · elevation and time zone Open-Meteo (CC BY 4.0) · weather NOAA aviationweather.gov.
-    Not for navigation.</p>
+  <p class="hint" style="text-align:center">Overhead is open source (MIT). Flight data adsb.lol (ODbL) · routes VRS standing data
+    (CC0) and adsbdb · airports OurAirports · addresses © OpenStreetMap contributors and the US Census Bureau geocoder ·
+    elevation and time zone by Open-Meteo.com (CC BY 4.0) · weather NOAA aviationweather.gov. Not affiliated with any
+    airline or airport. Not for navigation.</p>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -308,7 +318,8 @@
     plane_color: "#FF7800", airline_colors: true, bright_min: 6, bright_max: 90, scroll_speed: 20,
     on_db: 60, off_db: 57, cal_offset: 0, daily_budget: 450, brightness: "auto", display: "city",
     airport: "auto", timezone: "America/Chicago", rare_alerts: true, rare_chime: false, inbound_countdown: false,
-    recap: false, recap_hour: 20, rotation: [], rotate_every_s: 60, units: "F", temp_offset_c: -4, smart_polling: true };
+    recap: false, recap_hour: 20, rotation: [], rotate_every_s: 60, units: "F", temp_offset_c: -4, smart_polling: true,
+    airport_board: false, ntp_server: "time.cloudflare.com" };
   const SAMPLE_STATUS = { version: "1.0", mode: "clock", quiet: false, sign: "", sign_db: 0, sign_color: "#FF0A14",
     wifi: { ssid: "Sample Home Wi-Fi", rssi: -58, ip: "192.168.1.42" },
     feed: { calls_today: 212, budget: 450, next_poll_s: 37, error: "" },
@@ -376,7 +387,8 @@
     $("brightness").value = s.brightness;
     $("airport").value = s.airport;
     fillTimezones(s.timezone);
-    for (const k of ["rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling"]) $(k).checked = s[k];
+    for (const k of ["rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling", "airport_board"]) $(k).checked = s[k];
+    if (document.activeElement !== $("ntp_server")) $("ntp_server").value = s.ntp_server;
     $("recap_hour").value = s.recap_hour;
     for (const c of $("rotation").querySelectorAll("input")) c.checked = s.rotation.includes(c.value);
     for (const b of document.querySelectorAll(".seg button[data-units]")) b.setAttribute("aria-pressed", b.dataset.units === s.units);
@@ -396,7 +408,8 @@
     }, 350);
   }
   for (const b of document.querySelectorAll(".seg button[data-mode]")) b.onclick = () => { save({ mode: b.dataset.mode }); fill(); };
-  for (const k of ["clock_24h", "airline_colors", "rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling"])
+  $("ntpbtn").onclick = () => save({ ntp_server: $("ntp_server").value.trim() });
+  for (const k of ["clock_24h", "airline_colors", "rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling", "airport_board"])
     $(k).onchange = e => save({ [k]: e.target.checked });
   $("recap_hour").onchange = e => save({ recap_hour: Number(e.target.value) });
   $("rotation").onchange = () => save({ rotation: [...$("rotation").querySelectorAll("input:checked")].map(c => c.value) });
@@ -509,6 +522,7 @@
     if (document.activeElement !== $("address") && !$("address").value) $("address").value = s.location.address || "";
     showLoc();
     fillAirports(s.airport);
+    $("board-row").hidden = s.airport.iata !== "MSP";
     $("signtext").textContent = s.sign ? `Showing ${s.sign}` : settings && settings.mode === "clock" ? "Showing the time" : "Dark until a plane is audible";
     $("signdb").textContent = s.sign ? `${s.sign_db.toFixed(1)} dBA` : "";
     const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));

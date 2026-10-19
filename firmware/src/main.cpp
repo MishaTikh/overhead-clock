@@ -108,6 +108,17 @@ static void apply_timezone() {
     UNLOCK();
 }
 
+// One configurable time server. Not the public NTP pool (products must use their own vendor zone)
+// and not time.nist.gov (NIST asks devices not to hard-code it).
+static String ntp_host;  // must outlive the SNTP client, which keeps the pointer
+static void start_time_sync() {
+    LOCK();
+    ntp_host = S.ntp_server.c_str();
+    String tz = S.tz_posix.c_str();
+    UNLOCK();
+    configTzTime(tz.c_str(), ntp_host.c_str());
+}
+
 static void set_error(const String& e) {
     LOCK();
     last_error = e;
@@ -146,7 +157,8 @@ static void draw_static(const char* text, CRGB color) {
 }
 
 // ================================================================ network
-static const char* UA = "overhead-clock (+" PROJECT_URL ")";  // identifies the project, as Nominatim's policy asks
+// Identifies the project and version to every service, as Nominatim and aviationweather.gov ask.
+static const char* UA = "overhead-clock/" FW_VERSION " (+" PROJECT_URL ")";
 
 // HTTPS GET with certificate verification and no redirects. Caller reads the stream, then http.end().
 // Timeouts stay well under the 15 s watchdog: stream reads busy-wait on core 0.
@@ -224,9 +236,14 @@ static bool fetch_aircraft(double home_lat, double home_lon, std::vector<Fix>& o
 
 // Airport flight-board providers: the most reliable route, from the airport's own schedule.
 // Only MSP so far (mspairport.com); contributions for other airports go here.
-static bool lookup_board(const std::string& airport, const std::string& cs, bool departing, Route& r) {
+// Opt-in and unofficial: MSP's site terms allow viewing for personal use and don't address automated
+// access, so this is off by default, limited to one request per audible flight and 300 a day.
+static int board_calls_today = 0;
+static bool lookup_board(bool enabled, const std::string& airport, const std::string& cs, bool departing, Route& r) {
     std::string op, num;
-    if (airport != "MSP" || !split_callsign(cs, op, num) || !marketing_codes(op)) return false;
+    if (!enabled || airport != "MSP" || board_calls_today >= 300 || !split_callsign(cs, op, num) || !marketing_codes(op))
+        return false;
+    board_calls_today++;
     WiFiClientSecure client;
     HTTPClient http;
     String url = String("https://www.mspairport.com/flights-and-airlines/flights?flight_type=") +
@@ -511,7 +528,7 @@ static void network_task(void*) {
         double home_lat = S.home_lat, home_lon = S.home_lon;
         std::string airport = S.airport_iata;
         int quiet_start = S.quiet_start, quiet_end = S.quiet_end, budget = S.daily_budget;
-        bool smart = S.smart_polling;
+        bool smart = S.smart_polling, board = S.airport_board;
         UNLOCK();
 
         double now = now_s();
@@ -528,6 +545,7 @@ static void network_task(void*) {
             }
             today = lt.tm_yday;
             calls_today = 0;
+            board_calls_today = 0;
         }
 
         // airport weather every 30 minutes (separate free service, not part of the flight-data budget)
@@ -563,7 +581,9 @@ static void network_task(void*) {
         // last week) almost never brought planes over, check every 15 minutes instead of every 4.
         double idle = IDLE_INTERVAL_S;
         if (smart && !recent && (away || usually_quiet)) idle = 900;
-        double next = fmax(last_poll + HOT_INTERVAL_S, fmin(last_poll + idle, want));
+        // a few seconds of per-clock jitter so many clocks never poll in lockstep
+        static const double jitter = (esp_random() % 8000) / 1000.0;
+        double next = fmax(last_poll + HOT_INTERVAL_S, fmin(last_poll + idle + jitter, want));
         if (tokens < 1) next = fmax(next, now + (1 - tokens) / rate);
         next = fmax(next, feed_backoff_until);
         next_poll = next;
@@ -589,7 +609,7 @@ static void network_task(void*) {
         if (!cs.empty()) {
             Route r;
             bool ok = valid_callsign(cs) &&
-                      (lookup_board(airport, cs, dep, r) || lookup_vrs(cs, dep, r) || lookup_adsbdb(cs, dep, r));
+                      (lookup_board(board, airport, cs, dep, r) || lookup_vrs(cs, dep, r) || lookup_adsbdb(cs, dep, r));
             LOCK();
             tracker.routes.complete(cs, dep, ok, r, now_s());
             UNLOCK();
@@ -815,9 +835,12 @@ static void api_post_settings() {
     JsonDocument body;
     if (!write_ok(body)) return;
     LOCK();
+    std::string ntp_before = S.ntp_server;
     String err = settings_apply_json(body.as<JsonObjectConst>());
+    bool ntp_changed = S.ntp_server != ntp_before;
     UNLOCK();
     apply_timezone();
+    if (ntp_changed) start_time_sync();
     JsonDocument d;
     if (err.length()) { d["error"] = err; send_json(d, 400); return; }
     settings_to_json(d.to<JsonObject>());
@@ -1276,7 +1299,7 @@ void setup() {
         WiFi.begin();
     }
 
-    configTzTime(S.tz_posix.c_str(), "pool.ntp.org", "time.nist.gov");
+    start_time_sync();
     // mDNS starts in loop() once Wi-Fi is up
     static const char* hdrs[] = {"X-Overhead", "Authorization"};
     web.collectHeaders(hdrs, 2);

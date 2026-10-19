@@ -35,7 +35,9 @@ struct Settings {
     int rotate_every_s = 60;
     bool units_f = true;                      // Fahrenheit (else Celsius)
     float temp_offset_c = -4.0f;              // the TC001 sensor reads warm from its own electronics
-    bool smart_polling = true;                // poll less when the wind sends planes elsewhere / in quiet hours learned
+    bool smart_polling = true;
+    bool airport_board = false;               // opt-in: MSP's public flight pages for exact cities (unofficial)
+    std::string ntp_server = "time.cloudflare.com";  // never the public pool or NIST: both forbid hard-coding                // poll less when the wind sends planes elsewhere / in quiet hours learned
     uint32_t clock_rgb = 0xFFAA6E;            // warm white
     uint32_t plane_rgb = 0xFF7800;            // used when airline colors are off, or airline unknown
     int bright_min = BRIGHT_MIN, bright_max = BRIGHT_MAX;

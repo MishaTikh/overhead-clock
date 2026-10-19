@@ -202,7 +202,7 @@ def page3():
   <p>For the first few days, compare the <i>Recent</i> list with what you hear. If the sign lights before a plane is
   clearly audible, raise the threshold a few dBA; if it misses planes you notice, lower it.</p>
   <div class="grid2" style="margin-top:8pt">
-    <div>{led("747! LONDON", "#ffc800")}<p class="caption">A rare visitor: gold, with a sparkle.</p></div>
+    <div>{led("A350! AMSTERDAM", "#ffc800")}<p class="caption">A rare visitor: gold, with a sparkle.</p></div>
     <div>{led("", cols=inbound_cols(12), color="#ff7800")}
       <p class="caption">Inbound countdown: a plane is 12 seconds from audible.</p></div>
   </div>

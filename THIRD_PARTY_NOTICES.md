@@ -31,17 +31,23 @@ Each clock talks to these services directly from its owner's home network. Each 
 | Service | What for | Terms / attribution |
 |---|---|---|
 | [adsb.lol](https://adsb.lol) API | Aircraft positions near the house | Data under [ODbL 1.0](https://opendatacommons.org/licenses/odbl/); fair-use rate limits |
-| adsb.lol VRS standing data | Flight routes | Community data via adsb.lol |
-| [adsbdb](https://www.adsbdb.com) | Flight routes (fallback) | Free API, fair use |
-| Airport flight boards (currently [mspairport.com](https://www.mspairport.com)) | Accurate origin/destination at that airport | One request per audible flight; public flight information |
-| [US Census Geocoder](https://geocoding.geo.census.gov) | Address to coordinates (US) | US Government work |
+| [VRS standing data](https://github.com/vradarserver/standing-data) via adsb.lol | Flight routes | CC0 |
+| [adsbdb](https://www.adsbdb.com) | Flight routes (fallback) | Free API, low volume. Its route data may not be copied into other databases: the clock only uses it live and caches it in memory |
+| [mspairport.com](https://www.mspairport.com) flight search | Exact origin/destination near MSP | **Opt-in, off by default, unofficial.** The site's terms allow viewing for personal use; one request per audible flight, at most 300 a day. Not affiliated with the Metropolitan Airports Commission |
+| [US Census Geocoder](https://geocoding.geo.census.gov) | Address to coordinates (US addresses only) | US Government work. This product uses the Census Bureau Data API but is not endorsed or certified by the Census Bureau |
 | [Nominatim](https://nominatim.org) / OpenStreetMap | Address to coordinates (worldwide) | Data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), ODbL; [usage policy](https://operations.osmfoundation.org/policies/nominatim/): one request per lookup |
-| [Open-Meteo](https://open-meteo.com) | Ground elevation and time zone | [CC BY 4.0](https://open-meteo.com/en/license); free for non-commercial use |
+| [Open-Meteo](https://open-meteo.com) | Ground elevation and time zone | Weather data by Open-Meteo.com, [CC BY 4.0](https://open-meteo.com/en/license); free tier is for non-commercial use |
 | [aviationweather.gov](https://aviationweather.gov) (NOAA) | Airport weather (METAR) | US Government work |
-| NTP (pool.ntp.org, time.nist.gov) | Time | Public time service |
+| [Cloudflare Time Services](https://www.cloudflare.com/time/) (default, changeable) | Time (NTP) | Free public service. The public NTP pool and time.nist.gov are deliberately not used: both ask products not to hard-code them |
+
+## Teaser video (`docs/media/overhead-teaser.mp4`)
+- Footage by Joolsmagools and Sammy on [Pexels](https://www.pexels.com), under the [Pexels License](https://www.pexels.com/license/).
+- Music: "Fluffing a Duck" by Kevin MacLeod ([incompetech.com](https://incompetech.com)), licensed under
+  [Creative Commons: By Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+- The stock files themselves aren't in this repository; `tools/teaser/make_teaser.py` downloads them.
 
 ## Trademarks
 
 Ulanzi, AWTRIX and airline names are trademarks of their owners. Overhead is an independent project, not affiliated
-with or endorsed by Ulanzi, any airline, airport or data provider. Airline names and colors are used only to describe
-flights.
+with or endorsed by Ulanzi, any airline, airport or data provider. Airline names and simple colors are used only to
+describe flights; no airline logos are included. Airlines visible in the teaser footage appear incidentally.
