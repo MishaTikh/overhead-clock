@@ -590,6 +590,37 @@ def shadow_text(ctx, s, x, y, size, color=INK, alpha=1.0, font=DISPLAY_FONT, tra
     text(ctx, s, x, y, size, color, alpha, font, tracking=tracking)
 
 
+def led_caption(ctx, s, y, p=13, alpha=1.0, reveal=1.0, color=AMBER):
+    """Caption drawn as amber LED dots in the clock's own font, lighting up left to right."""
+    if alpha <= 0:
+        return
+    cols = text_columns(s)
+    n = len(cols)
+    x0 = (W - n * p) / 2
+    lit_upto = reveal * (n + 8)
+    for cx, c in enumerate(cols):
+        k = clamp(lit_upto - cx, 0, 8) / 8.0  # each column warms up over a few columns' time
+        if k <= 0:
+            continue
+        a = alpha * k
+        for cy in range(8):
+            if not (c >> cy) & 1:
+                continue
+            px, py = x0 + cx * p, y + cy * p
+            g = cairo.RadialGradient(px + p / 2, py + p / 2, 1, px + p / 2, py + p / 2, p * 1.4)
+            g.add_color_stop_rgba(0, *color, 0.45 * a)
+            g.add_color_stop_rgba(1, *color, 0)
+            ctx.set_source(g)
+            ctx.arc(px + p / 2, py + p / 2, p * 1.4, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.set_source_rgba(0, 0, 0, 0.35 * a)  # a little shadow keeps it readable on bright sky
+            rounded_rect(ctx, px + 2, py + 3, p - 2, p - 2, 2)
+            ctx.fill()
+            ctx.set_source_rgba(*color, a)
+            rounded_rect(ctx, px + 1, py + 1, p - 2, p - 2, 2)
+            ctx.fill()
+
+
 CLIPS = {}
 
 
@@ -604,7 +635,7 @@ def scene_trees(ctx, t):
     """4.5-9.5 s: a Dreamliner low over the trees, real engine sound."""
     lt = t - 4.5
     paint_footage(ctx, clip("landing_trees.mp4"), lt, 5.0, 1.08)
-    shadow_text(ctx, "Live under a flight path?", W / 2, H - 120, 72, INK, window(lt, 0.5, 4.9, 0.5), TEXT_FONT)
+    led_caption(ctx, "LIVE UNDER A FLIGHT PATH?", H - 210, 13, window(lt, 0.4, 4.9, 0.3), ease_out(clamp((lt - 0.4) / 1.1)))
 
 
 def scene_overhead(ctx, t):
@@ -615,7 +646,9 @@ def scene_overhead(ctx, t):
     if slide > 0:
         cols = frame_cols("DENVER", max(0.0, lt - 1.4), speed=22, hold=0.8)
         draw_device(ctx, W - 520, H - 300 + (1 - slide) * 420, 820, cols, (1.0, 0.47, 0.0), 0.95, alpha=slide)  # default plane color: airline unknown
-    shadow_text(ctx, "Overhead tells you where it came from, or where it's going.", W / 2, 140, 64, INK, window(lt, 1.6, 6.9, 0.5), TEXT_FONT)
+    a = window(lt, 1.4, 6.9, 0.3)
+    led_caption(ctx, "WHERE IT CAME FROM,", 70, 12, a, ease_out(clamp((lt - 1.4) / 1.0)))
+    led_caption(ctx, "OR WHERE IT'S GOING.", 190, 12, a, ease_out(clamp((lt - 2.3) / 1.0)))
 
 
 def scene_rings(ctx, t):
@@ -737,7 +770,6 @@ def soundtrack(path):
 
     jet_env = np.zeros(n)
     jet_env += place(jet, 4.5, 0.95)     # the Dreamliner's own sound
-    jet_env += place(jet, 10.6, 0.70)    # the jet overhead
     jet_env = np.convolve(np.clip(jet_env, 0, 1), np.ones(SR // 4) / (SR // 4), mode="same")
     rng = np.random.default_rng(1)
     for k in range(4):                   # button clicks
