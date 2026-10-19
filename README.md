@@ -3,6 +3,15 @@
 **A little LED clock that tells you where the plane over your house is coming from (or going), only while you can
 actually hear it.**
 
+<p align="center">
+  <a href="docs/media/overhead-teaser.mp4">
+    <img src="docs/media/overhead-preview.webp" width="800"
+         alt="A jet passes overhead while the clock scrolls DENVER in LED dots">
+  </a>
+  <br>
+  <a href="docs/media/overhead-teaser.mp4"><b>▶ Watch the 29-second teaser (with sound)</b></a>
+</p>
+
 Overhead is open-source firmware for the [Ulanzi TC001](docs/hardware.md) pixel clock (an ESP32 with a 32x8 RGB LED
 matrix). Live near an airport? When a plane roars over, the clock scrolls `DENVER` in Delta red, then goes back to
 being a clock. No computer, server or account: it just needs Wi-Fi.
@@ -13,7 +22,7 @@ being a clock. No computer, server or account: it just needs Wi-Fi.
 
 > **Status:** 0.1 builds and passes its tests, but hasn't run on a real TC001 yet. Hardware testers welcome.
 
-**[Quick start guide (PDF)](docs/Overhead-Quick-Start.pdf)** · **[Teaser video](docs/media/overhead-teaser.mp4)**
+**[Quick start guide (PDF)](docs/Overhead-Quick-Start.pdf)**
 
 ## What it does
 - **Only when it's audible.** Estimates how loud each nearby plane is at your house (distance, height, aircraft size,

@@ -843,7 +843,12 @@ def main():
             except OSError:
                 pass
     os.remove(wav)
-    print("wrote", os.path.relpath(OUT_MP4, ROOT))
+    # the autoplaying preview at the top of the README: the "curious where it came from" scene, no sound
+    preview = os.path.join(OUT_DIR, "overhead-preview.webp")
+    subprocess.run([ff, "-y", "-loglevel", "error", "-ss", "4.2", "-t", "7.0", "-i", OUT_MP4,
+                    "-vf", "fps=15,scale=800:-1:flags=lanczos", "-c:v", "libwebp_anim", "-quality", "70",
+                    "-compression_level", "6", "-loop", "0", "-an", preview], check=True)
+    print("wrote", os.path.relpath(OUT_MP4, ROOT), "and", os.path.relpath(preview, ROOT))
 
 
 if __name__ == "__main__":
