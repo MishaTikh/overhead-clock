@@ -122,7 +122,7 @@ def page1():
       (github.com/MishaTikh/overhead-clock), unzip it and double-click <span style="font-weight:600">Install-Overhead.bat</span>. It finds the clock and
       installs Overhead in about 30 seconds. On a Mac, Linux or a phone: open <span class="mono">http://clock.local/update</span>,
       choose <span class="mono">overhead-tc001-app.bin</span> and upload.</div></div>
-    <div class="step"><div><b>Sign in and set your address</b>Hold the clock's middle button: it scrolls its settings
+    <div class="step"><div><b>Sign in and set your address</b>Hold the clock's middle button for 3 seconds, until the display changes: it scrolls its settings
       address, then the 12-character password four characters at a time (<span class="mono">K7PR</span>,
       <span class="mono">3XQ9</span>, <span class="mono">TMWA</span>), each standing still. The left and right buttons step
       back and forward. Open that address, sign in as <span class="mono">admin</span> and type your street address.</div></div>

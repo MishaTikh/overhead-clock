@@ -4,7 +4,7 @@
 // address entered during setup, so nothing in this file is specific to one place.
 #pragma once
 
-#define FW_VERSION      "0.1.2"
+#define FW_VERSION      "0.1.3"
 #define PROJECT_URL     "https://github.com/MishaTikh/overhead-clock"
 #define HOSTNAME        "overhead"           // http://overhead.local
 #define MAX_AIRPORT_NM  60.0                 // nearest-airport search radius
@@ -54,6 +54,8 @@
 #define PIN_BTN_LEFT    26
 #define PIN_BTN_MID     27
 #define PIN_BTN_RIGHT   14
+#define HOLD_LEFT_MS    1500    // left hold: replay recent planes
+#define HOLD_MID_MS     3000    // middle hold: settings address + password
 #define PIN_BUZZER      15
 #define PIN_LDR         35
 #define MATRIX_W        32

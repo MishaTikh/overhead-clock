@@ -1199,9 +1199,9 @@ static void inbound_frame(float secs, uint8_t* cols) {
 
 // ================================================================ buttons & light
 //   Left    press: what to show, CITY > CODES > AIRLINE > FULL     hold 1.5 s: replay recent planes
-//   Middle  press: Clock + planes / Planes only                    hold 1.5 s: settings address + password
+//   Middle  press: Clock + planes / Planes only                    hold 3 s:   settings address + password
 //   Right   press: brightness, AUTO > LOW > MEDIUM > HIGH
-//   Left held while plugging in: forget Wi-Fi and start setup again
+//   Holds act while the button is still down. Left held while plugging in: forget Wi-Fi and start setup again
 static float ambient = 0.5f;
 static int history_pos = -1;
 static double history_until = 0;
@@ -1240,53 +1240,49 @@ static void replay_recent() {
 }
 
 static void handle_buttons() {
-    struct Btn { int pin; bool was; uint32_t at; };
-    static Btn left{PIN_BTN_LEFT, false, 0}, mid{PIN_BTN_MID, false, 0}, right{PIN_BTN_RIGHT, false, 0};
-    auto released = [](Btn& b, uint32_t& held) {
+    // A press acts when it's released; a hold acts as soon as the button has been down long
+    // enough, so the display answers while it's still held and the release afterwards does nothing.
+    struct Btn { int pin; bool was; uint32_t at; bool fired; };
+    static Btn left{PIN_BTN_LEFT, false, 0, false}, mid{PIN_BTN_MID, false, 0, false}, right{PIN_BTN_RIGHT, false, 0, false};
+    auto poll = [](Btn& b, uint32_t hold_ms, bool& press, bool& hold) {
         bool down = digitalRead(b.pin) == LOW;
-        bool rel = false;
-        if (down && !b.was) b.at = millis();
-        if (!down && b.was) { held = millis() - b.at; rel = held > 30; }  // ignore contact bounce
+        uint32_t ms = millis();
+        press = hold = false;
+        if (down && !b.was) { b.at = ms; b.fired = false; }
+        if (down && hold_ms && !b.fired && ms - b.at >= hold_ms) { b.fired = true; hold = true; }
+        if (!down && b.was && !b.fired) press = ms - b.at > 30;  // ignore contact bounce
         b.was = down;
-        return rel;
     };
-    uint32_t held_l = 0, held_m = 0, held_r = 0;
-    bool rel_l = released(left, held_l), rel_m = released(mid, held_m), rel_r = released(right, held_r);
+    bool press_l, hold_l, press_m, hold_m, press_r, hold_r;
+    poll(left, HOLD_LEFT_MS, press_l, hold_l);
+    poll(mid, HOLD_MID_MS, press_m, hold_m);
+    poll(right, 0, press_r, hold_r);
     double now = now_s();
     LOCK();
     bool seq_on = credential_seq.active(now);
     if (seq_on) {  // while the address and password are showing, the buttons page through them
-        if (rel_l) credential_seq.prev(now);
-        if (rel_r) credential_seq.next(now);
-        if (rel_m && held_m <= 1500) credential_seq.stop();
+        if (press_l) credential_seq.prev(now);
+        if (press_r) credential_seq.next(now);
+        if (press_m) credential_seq.stop();
     }
     UNLOCK();
     if (seq_on) {
-        if (rel_m && held_m > 1500) show_credentials();  // start over
+        if (hold_m) show_credentials();  // start over
         return;
     }
-    uint32_t held;
-    if (rel_l) {
-        held = held_l;
-        if (held > 1500) {
-            replay_recent();
-        } else {
-            S.display_format = (S.display_format + 1) % DISPLAY_FORMATS;
-            save_settings_locked();
-            preview_format();
-        }
+    if (hold_l) replay_recent();
+    if (press_l) {
+        S.display_format = (S.display_format + 1) % DISPLAY_FORMATS;
+        save_settings_locked();
+        preview_format();
     }
-    if (rel_m) {
-        held = held_m;
-        if (held > 1500) {  // physical presence: how to reach the settings page
-            show_credentials();
-        } else {
-            S.mode = S.mode ? 0 : 1;
-            save_settings_locked();
-            show_override(S.mode ? "CLOCK" : "PLANES", 2, 0x00B4FF);
-        }
+    if (hold_m) show_credentials();  // physical presence: how to reach the settings page
+    if (press_m) {
+        S.mode = S.mode ? 0 : 1;
+        save_settings_locked();
+        show_override(S.mode ? "CLOCK" : "PLANES", 2, 0x00B4FF);
     }
-    if (rel_r) {
+    if (press_r) {
         S.brightness = (S.brightness + 1) % 4;
         save_settings_locked();
         static const char* names[] = {"AUTO", "LOW", "MEDIUM", "HIGH"};
