@@ -327,7 +327,7 @@
     airport_board: false, ntp_server: "time.cloudflare.com" };
   const SAMPLE_STATUS = { version: "1.0", mode: "clock", quiet: false, sign: "", sign_db: 0, sign_color: "#FF0A14",
     wifi: { ssid: "Sample Home Wi-Fi", rssi: -58, ip: "192.168.1.42" },
-    feed: { calls_today: 212, budget: 450, next_poll_s: 37, error: "" }, free_heap: 142000, min_free_heap: 98000,
+    feed: { calls_today: 212, budget: 450, next_poll_s: 37, error: "" }, free_heap: 142000, min_free_heap: 98000, uptime_s: 93600, reset_reason: "power on",
     location: { set: true, address: "4100 Example Ave S, Minneapolis, MN 55416", lat: 44.93, lon: -93.34, elev_ft: 912, timezone: "America/Chicago", lookup: "idle", message: "" },
     airport: { iata: "MSP", city: "Minneapolis", auto: true, dist_nm: 5.2, nearby: [ { iata: "MSP", city: "Minneapolis", dist_nm: 5.2 }, { iata: "STP", city: "St Paul", dist_nm: 8.9 } ] },
     weather: { ok: true, temp_c: 7.2, wind_dir: 120, wind_kt: 11, gust_kt: 0, cover: "FEW", raw: "METAR KMSP 191753Z 12011KT 10SM FEW250 07/03 A3028", flow: "LANDINGS OVER YOU", runway: "12R" },
@@ -540,6 +540,8 @@
     for (const [k, v] of [["Network", s.wifi.ssid], ["Signal", `${bars} (${s.wifi.rssi} dBm)`], ["Clock's address", s.wifi.ip],
                           ["Flight data today", `${s.feed.calls_today} of ${s.feed.budget} requests`],
                           ...(s.feed.error ? [["Last problem", s.feed.error]] : []),
+                          ["Running for", s.uptime_s < 3600 ? `${Math.round(s.uptime_s / 60)} min` : `${(s.uptime_s / 3600).toFixed(1)} h`],
+                          ["Last restart", s.reset_reason],
                           ["Free memory", `${Math.round(s.free_heap / 1024)} KB (lowest ${Math.round(s.min_free_heap / 1024)} KB)`],
                           ["Firmware", s.version]]) {
       const a = document.createElement("span"); a.textContent = k;

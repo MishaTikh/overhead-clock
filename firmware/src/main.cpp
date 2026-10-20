@@ -35,6 +35,8 @@
 #include <Wire.h>
 #include <esp_bt.h>
 #include <esp_task_wdt.h>
+#include <esp_system.h>
+#include <esp_timer.h>
 #include <Preferences.h>
 #include <sys/time.h>
 
@@ -814,6 +816,11 @@ static void api_status() {
     feed["error"] = last_error;
     d["free_heap"] = ESP.getFreeHeap();
     d["min_free_heap"] = ESP.getMinFreeHeap();
+    d["uptime_s"] = (uint32_t)(esp_timer_get_time() / 1000000);
+    static const char* reasons[] = {"unknown", "power on", "external pin", "restart", "crash", "interrupt watchdog",
+                                    "task watchdog", "other watchdog", "deep sleep", "brownout (low power)", "SDIO"};
+    int rr = (int)esp_reset_reason();
+    d["reset_reason"] = rr >= 0 && rr < (int)(sizeof(reasons) / sizeof(reasons[0])) ? reasons[rr] : "unknown";
     JsonObject loc = d["location"].to<JsonObject>();
     loc["set"] = location_set();
     loc["address"] = S.address.c_str();
