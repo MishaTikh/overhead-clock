@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+- Fixed: a short press on any button restarted the clock (saving the setting called itself until the
+  stack ran out).
+
 ## 0.1.3
 - Button holds act while the button is still held, so the display shows when to let go. The middle button opens the
   settings address and password after 3 seconds; the left button replays recent planes after 1.5 seconds.

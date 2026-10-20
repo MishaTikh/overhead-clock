@@ -161,7 +161,7 @@ static void set_error(const String& e) {
 
 static void save_settings_locked() {
     LOCK();
-    save_settings_locked();
+    settings_save();
     UNLOCK();
 }
 

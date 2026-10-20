@@ -4,7 +4,7 @@
 // address entered during setup, so nothing in this file is specific to one place.
 #pragma once
 
-#define FW_VERSION      "0.1.3"
+#define FW_VERSION      "0.1.4"
 #define PROJECT_URL     "https://github.com/MishaTikh/overhead-clock"
 #define HOSTNAME        "overhead"           // http://overhead.local
 #define MAX_AIRPORT_NM  60.0                 // nearest-airport search radius
