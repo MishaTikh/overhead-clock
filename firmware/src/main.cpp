@@ -544,6 +544,80 @@ static void save_hour_model() {
     p.end();
 }
 
+// Today's planes and stats, kept across restarts. Saved at most every 2 minutes, only when they changed.
+static void save_today() {
+    JsonDocument d;
+    LOCK();
+    const DayStats& st = tracker.stats;
+    d["saved"] = (uint32_t)time(nullptr);
+    d["yday"] = st.yday;
+    d["planes"] = st.planes;
+    d["arr"] = st.arrivals;
+    d["dep"] = st.departures;
+    d["fc"] = st.farthest_city.c_str();
+    d["fnm"] = st.farthest_nm;
+    d["lt"] = st.loudest_type.c_str();
+    d["lcs"] = st.loudest_cs.c_str();
+    d["ldb"] = st.loudest_db;
+    for (auto& r : st.rare) d["rare"].add(r.c_str());
+    for (int h = 0; h < 24; h++) d["hours"].add(st.by_hour[h]);
+    for (int i = 0; i < tracker.n_passes; i++) {
+        const Pass& p = tracker.passes[i];
+        JsonObject o = d["passes"].add<JsonObject>();
+        o["t"] = (uint32_t)p.start; o["cs"] = p.cs; o["ty"] = p.type; o["c"] = p.city; o["o"] = p.other_iata;
+        o["r"] = p.rare; o["pk"] = p.peak; o["agl"] = p.agl; o["s"] = p.secs; o["d"] = p.dep;
+    }
+    UNLOCK();
+    String out;
+    serializeJson(d, out);
+    Preferences p;
+    p.begin("today", false);
+    p.putString("j", out);
+    p.end();
+}
+
+static void load_today(int yday) {
+    Preferences p;
+    p.begin("today", true);
+    String in = p.getString("j", "");
+    p.end();
+    JsonDocument d;
+    if (in.isEmpty() || deserializeJson(d, in)) return;
+    // same day of the year, and saved within the last day (not the same date a year ago)
+    if ((d["yday"] | -2) != yday || time(nullptr) - (time_t)(d["saved"] | 0u) > 86400) return;
+    LOCK();
+    DayStats& st = tracker.stats;
+    st.reset(yday);
+    st.planes = d["planes"] | 0;
+    st.arrivals = d["arr"] | 0;
+    st.departures = d["dep"] | 0;
+    st.farthest_city = (const char*)(d["fc"] | "");
+    st.farthest_nm = d["fnm"] | 0.0;
+    st.loudest_type = (const char*)(d["lt"] | "");
+    st.loudest_cs = (const char*)(d["lcs"] | "");
+    st.loudest_db = d["ldb"] | 0.0f;
+    for (JsonVariant r : d["rare"].as<JsonArray>()) st.rare.push_back((const char*)(r | ""));
+    int h = 0;
+    for (JsonVariant v : d["hours"].as<JsonArray>()) if (h < 24) st.by_hour[h++] = v | 0;
+    tracker.n_passes = 0;
+    for (JsonObject o : d["passes"].as<JsonArray>()) {
+        if (tracker.n_passes >= MAX_PASSES) break;
+        Pass& ps = tracker.passes[tracker.n_passes++];
+        memset(&ps, 0, sizeof(ps));
+        ps.start = (time_t)(o["t"] | 0u);
+        strncpy(ps.cs, o["cs"] | "", sizeof(ps.cs) - 1);
+        strncpy(ps.type, o["ty"] | "", sizeof(ps.type) - 1);
+        strncpy(ps.city, o["c"] | "", sizeof(ps.city) - 1);
+        strncpy(ps.other_iata, o["o"] | "", sizeof(ps.other_iata) - 1);
+        strncpy(ps.rare, o["r"] | "", sizeof(ps.rare) - 1);
+        ps.peak = o["pk"] | 0.0f;
+        ps.agl = o["agl"] | 0;
+        ps.secs = o["s"] | 0.0f;
+        ps.dep = o["d"] | false;
+    }
+    UNLOCK();
+}
+
 static void finish_geocode(GeoState st, const String& msg) {
     LOCK();
     geo_message = msg;
@@ -619,6 +693,7 @@ static void network_task(void*) {
         struct tm lt;
         localtime_r(&tt, &lt);
         if (lt.tm_yday != today) {
+            if (today < 0) load_today(lt.tm_yday);  // after a restart: pick the day up where it left off
             if (today >= 0) {  // a day ended: learn its busy hours, start fresh stats
                 LOCK();
                 if (tracker.stats.yday == today) hour_model.end_of_day(tracker.stats.by_hour);
@@ -681,6 +756,14 @@ static void network_task(void*) {
                 tracker.ingest(fixes, now_s());
                 UNLOCK();
             }
+        }
+
+        static int saved_planes = -1;
+        static double last_save = 0;
+        if (tracker.stats.planes != saved_planes && now - last_save > 120) {
+            saved_planes = tracker.stats.planes;
+            last_save = now;
+            save_today();
         }
 
         std::string cs;

@@ -5,6 +5,7 @@
   out), not when it's almost audible. If a lookup is still running, the sign waits up to 4 seconds for it rather than
   show the callsign first.
 - The dashboard shows how long the clock has been running and why it last restarted.
+- Today's planes and stats survive a restart (saved at most every 2 minutes, only when they change).
 
 ## 0.1.5
 - Fixed: no flight data. adsb.lol now refuses HTTP/1.0 requests (426 Upgrade Required); the clock asks it over
