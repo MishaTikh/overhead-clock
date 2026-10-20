@@ -20,8 +20,8 @@ being a clock. No computer, server or account: it just needs Wi-Fi.
 ![Status: early](https://img.shields.io/badge/status-0.1%20early-orange)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-> **Status:** 0.1 is early. It installs, boots and updates over Wi-Fi on a real TC001; the plane features are still
-> being tested day to day. Testers welcome.
+> **Status:** 0.1 is early. It runs day to day on a real TC001 under MSP's arrival path: installs and updates over
+> Wi-Fi, tracks planes and shows where they came from. Testers welcome, especially near other airports.
 
 **[Quick start guide (PDF)](docs/Overhead-Quick-Start.pdf)**
 
@@ -35,7 +35,8 @@ being a clock. No computer, server or account: it just needs Wi-Fi.
 - **Airline colors,** and **rare aircraft** (747, A380, Dreamliner, military, helicopters, vintage) in sparkling gold.
 - **Optional extras,** all off by default: inbound countdown, evening recap ("142 PLANES TODAY  FARTHEST TOKYO"),
   chime for rare planes, indoor/outdoor temperature, date, sunrise/sunset, and "landings over you today" from the wind.
-- **A dashboard on your phone:** today's planes, the hours planes usually pass over you, airport weather.
+- **A dashboard on your phone:** today's planes (kept across restarts), the hours planes usually pass over you,
+  airport weather, and the clock's own health: uptime, why it last restarted, free memory.
 
 ## Get started
 Everything happens over Wi-Fi: no cables, drivers or flashing tools.
@@ -46,8 +47,8 @@ Everything happens over Wi-Fi: no cables, drivers or flashing tools.
    (`overhead-installer.zip`), unzip it on a Windows PC on the same Wi-Fi and double-click **Install-Overhead.bat**.
    It finds the clock and installs Overhead in about 30 seconds.
    *On a Mac, Linux or phone:* open http://clock.local/update in a browser, choose `overhead-tc001-app.bin` and upload.
-3. **Sign in.** Hold the clock's middle button for 3 seconds, until the display changes: it shows its settings address, then the password four characters at a
-   time (left and right buttons step through). Open the address, sign in as `admin` and type your street address.
+3. **Sign in.** Hold the clock's middle button for 3 seconds, until the display changes: it shows its settings
+   address, then the password four characters at a time (left and right buttons step through). Open the address, sign in as `admin` and type your street address.
 
 Updating later works the same way: run the installer again, or use *Update firmware* on the settings page.
 Details and troubleshooting are in the [quick start guide](docs/Overhead-Quick-Start.pdf).

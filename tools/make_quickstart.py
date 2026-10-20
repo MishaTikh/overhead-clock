@@ -16,6 +16,8 @@ from overhead.matrix import text_columns  # noqa: E402  (same font table as the 
 
 OUT_HTML = os.path.join(ROOT, "docs", "quickstart.html")
 OUT_PDF = os.path.join(ROOT, "docs", "Overhead-Quick-Start.pdf")
+with open(os.path.join(ROOT, "firmware", "src", "config.h"), encoding="utf-8") as _f:
+    FW_VERSION = next(l.split('"')[1] for l in _f if l.startswith("#define FW_VERSION"))
 
 
 def led(text, color="#ff9a3c", width=32, scroll_offset=0, cols=None):
@@ -238,7 +240,7 @@ def page4():
   <h2 style="margin-top:16pt">Privacy and security</h2>
   <div class="grid2">
     <div class="card"><b>Stays at home</b><br>No account, cloud or remote access, and no internet port opened. The
-      setup Wi-Fi and the settings page are password protected. Updates need a USB cable at the clock.</div>
+      setup Wi-Fi, the settings page and firmware updates are all password protected.</div>
     <div class="card"><b>What leaves the house</b><br>Your address once (or nothing, if you enter coordinates), your
       location rounded to about 1 km when asking for nearby planes, and flight numbers when looking up routes. Every
       connection is verified HTTPS.</div>
@@ -247,14 +249,14 @@ def page4():
   affiliated with Ulanzi, any airline or airport, and it's for fun, not navigation or safety. Data from adsb.lol (ODbL),
   OurAirports, &copy; OpenStreetMap contributors, Open-Meteo (CC BY 4.0), NOAA aviationweather.gov and the US Census
   Geocoder.</p>
-  <p class="foot">github.com/MishaTikh/overhead-clock &middot; firmware 0.1.1</p>
+  <p class="foot">github.com/MishaTikh/overhead-clock &middot; firmware {FW_VERSION}</p>
 </section>"""
 
 
 def main():
     doc = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Overhead Quick Start</title><style>{CSS}</style></head>
-<body>{page1()}{page2()}{page3()}{page4()}</body></html>"""
+<body>{page1()}{page2()}{page3()}{page4().replace("{FW_VERSION}", FW_VERSION)}</body></html>"""
     open(OUT_HTML, "w", encoding="utf-8", newline="\n").write(doc)
     browsers = [
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
