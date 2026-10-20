@@ -12,6 +12,13 @@ actually hear it.**
   <a href="docs/media/overhead-teaser.mp4"><b>▶ Watch the 29-second teaser (with sound)</b></a>
 </p>
 
+<p align="center">
+  <img src="docs/media/overhead-clock.gif" width="480"
+       alt="The real clock on a shelf: the time slides out as APPLETON scrolls in">
+  <br>
+  <sub>The real thing: 6:58 gives way to a plane from Appleton.</sub>
+</p>
+
 Overhead is open-source firmware for the [Ulanzi TC001](docs/hardware.md) pixel clock (an ESP32 with a 32x8 RGB LED
 matrix). Live near an airport? When a plane roars over, the clock scrolls `DENVER` in Delta red, then goes back to
 being a clock. No computer, server or account: it just needs Wi-Fi.
