@@ -63,6 +63,21 @@ int main(int argc, char** argv) {
     printf("pass: on at %.0f s, off at %.0f s (%.0f s audible), peak %.1f dBA, text '%s'\n", on, off, off - on, peak, tr.msg.text.c_str());
     CHECK(on > 0 && off > on && off - on > 20 && off - on < 50);
     CHECK(peak > 70 && peak < 78);   // A320-class at ~2,200 ft overhead
+    // early route lookup: queued on the first fix, minutes out, for a plane headed over the house only
+    {
+        double lat, lon;
+        move(44.88780, -93.23410, 301.3, 9.5 * 6076.12, lat, lon);
+        Fix f; f.hex = 0xabc124; strcpy(f.cs, "DAL2160"); strcpy(f.cat, "A3");
+        f.lat = lat; f.lon = lon; f.alt = 3900; f.gs = 145; f.trk = 121.3; f.vrate = -770;
+        Tracker tp;
+        tp.ingest({f}, t0);
+        RouteEntry* q = tp.routes.next_request();
+        CHECK(q && q->cs == "DAL2160" && !q->departing);
+        f.trk = 30;                   // same spot, flying past to the north-east
+        Tracker tq;
+        tq.ingest({f}, t0);
+        CHECK(tq.routes.next_request() == nullptr);
+    }
     // 5. rendering
     Marquee m; uint8_t cols[32];
     for (const char* city : {"DENVER", "SAN FRANCISCO"}) {

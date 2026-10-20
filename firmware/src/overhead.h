@@ -175,6 +175,7 @@ public:
     int count() const;
 private:
     bool is_departing(const Track& t) const;
+    bool will_pass_over(const Track& t, double now) const;
     void heard_level(Track& t, double now, float& slant);
     void choose(double now);
     void fill_text(Message& m, Track& t, double now);

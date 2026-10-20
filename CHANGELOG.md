@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+- The city shows straight away: a plane's route is looked up as soon as it's headed over the house (up to 10 minutes
+  out), not when it's almost audible. If a lookup is still running, the sign waits up to 4 seconds for it rather than
+  show the callsign first.
+
 ## 0.1.5
 - Fixed: no flight data. adsb.lol now refuses HTTP/1.0 requests (426 Upgrade Required); the clock asks it over
   HTTP/1.1 and handles chunked replies.

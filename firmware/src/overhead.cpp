@@ -475,6 +475,26 @@ void Tracker::ingest(const std::vector<Fix>& fixes, double fetch_time) {
         slot->t_fix = fetch_time - fx.seen_pos;
         slot->rare = rare_label(slot->f.type, slot->f.cs, slot->f.cat, slot->f.db_flags);
     }
+    // Look up where planes headed over the house are from (or going) now, minutes before they're heard,
+    // so the sign shows the city straight away instead of the callsign first.
+    for (auto& t : tracks)
+        if (t.used && t.f.cs[0] && will_pass_over(t, fetch_time)) routes.get(t.f.cs, is_departing(t), fetch_time);
+}
+
+// Straight-line closest approach: within 2 nm of the house in the next 10 minutes, low enough to be heard.
+bool Tracker::will_pass_over(const Track& t, double now) const {
+    double lat, lon, d, brg;
+    float alt;
+    t.predict(now, lat, lon, alt);
+    dist_bearing_ft(S.home_lat, S.home_lon, lat, lon, d, brg);
+    if (d < 2 * NM_FT) return alt - S.home_elev < 12000;
+    double x = d * sin(brg * D2R), y = d * cos(brg * D2R);
+    double v = t.f.gs * KT_TO_FPS;
+    if (v < 1) return false;
+    double vx = v * sin(t.f.trk * D2R), vy = v * cos(t.f.trk * D2R);
+    double t_cpa = -(x * vx + y * vy) / (v * v);
+    double miss = hypot(x + vx * t_cpa, y + vy * t_cpa);
+    return t_cpa > 0 && t_cpa < 600 && miss < 2 * NM_FT && alt - S.home_elev < 12000;
 }
 
 bool Tracker::is_departing(const Track& t) const {
@@ -542,6 +562,9 @@ void Tracker::choose(double now) {
     for (auto& t : tracks)
         if (t.used && t.level >= S.on_db && (!best || t.level > best->level)) best = &t;
     if (best) {
+        // a lookup still running: give it a few seconds rather than show the callsign and then the city
+        RouteEntry* e = best->f.cs[0] ? routes.get(best->f.cs, best->departing, now) : nullptr;
+        if (e && e->state == RouteState::Pending && now - best->pass_start < ROUTE_WAIT_S) return;
         msg = Message();
         msg.active = true;
         msg.hex = best->f.hex;
