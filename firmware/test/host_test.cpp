@@ -114,6 +114,27 @@ int main(int argc, char** argv) {
     CHECK(ds.planes == 2 && ds.farthest_city == "Tokyo" && ds.loudest_type == "A359");
     struct tm u = {}; u.tm_year = 126; u.tm_mon = 9; u.tm_mday = 19; u.tm_hour = 1; u.tm_min = 2; u.tm_sec = 3;
     CHECK(utc_from_tm(u) == 1792371723);
+    // sign sequence: still password pages with progress marks, buttons step through
+    {
+        SignSequence q;
+        std::vector<SignStep> st = {SignStep("SETTINGS 192.168.1.2", 2.0, false, 10), SignStep("K7PR", 3.0, true, 0, 1, 3),
+                                    SignStep("3XQ9", 3.0, true, 0, 2, 3), SignStep("TMWA", 3.0, true, 0, 3, 3)};
+        q.start(st, 100.0, 1, 1);
+        uint8_t f[32], g[32];
+        CHECK(q.frame(102.5, f));                     // on the first page
+        int lit = 0; for (int x = 0; x < 32; x++) lit += (f[x] & 0x80) != 0;
+        CHECK(lit == 3);                               // one of three progress marks
+        q.frame(103.0, g);
+        CHECK(memcmp(f, g, 32) == 0);                  // still: doesn't scroll
+        CHECK(q.frame(110.0, f));                      // repeats the pages once
+        CHECK(q.frame(119.5, f) && !q.frame(120.5, f));  // header 2 s + pages 9 s + one repeat 9 s, then done
+        q.start(st, 200.0, 1, 1);
+        q.next(200.1); q.next(200.2);                  // buttons: manual mode, holds the page
+        CHECK(q.frame(290.0, f));
+        lit = 0; for (int x = 0; x < 32; x++) lit += (f[x] & 0x80) != 0;
+        CHECK(lit == 6);                               // second of three pages
+        CHECK(!q.frame(330.0, f));                     // closes 2 minutes after the last press
+    }
     // 8. clock face
     clock_frame(21, 45, true, false, cols);
     printf("clock 21:45 (12 h)\n");

@@ -104,7 +104,8 @@ try {
         Say "Uploading to the stock update page (about 30 seconds)..."
         $code = & $curl -s -m 300 -o $tmp -w "%{http_code}" -F "MD5=$md5" -F "firmware=@$Firmware;filename=firmware;type=application/octet-stream" "http://$Clock/update"
     } else {
-        Say "Sign in with the clock's admin password. Hold the clock's middle button to see it (the spaces aren't part of it)."
+        Say "Sign in with the clock's admin password. Hold the clock's middle button to see it, four characters at a time"
+        Say "(the left and right buttons step back and forward)."
         $secure = Read-Host "Admin password" -AsSecureString
         $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
         Say "Uploading to Overhead's update page (about 30 seconds)..."
@@ -127,7 +128,7 @@ if ($code -eq "200") {
         Say "your phone, sign in as admin, and enter your street address."
     }
 } elseif ($code -eq "401") {
-    Fail "The password wasn't accepted. Hold the middle button to see it again; type it without the spaces."
+    Fail "The password wasn't accepted. Hold the middle button to see it again (12 characters, no spaces)."
 } elseif ($code -eq "429") {
     Fail "Too many wrong passwords from this computer. Wait a minute and try again."
 } else {

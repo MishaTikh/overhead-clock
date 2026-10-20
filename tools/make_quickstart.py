@@ -123,9 +123,9 @@ def page1():
       installs Overhead in about 30 seconds. On a Mac, Linux or a phone: open <span class="mono">http://clock.local/update</span>,
       choose <span class="mono">overhead-tc001-app.bin</span> and upload.</div></div>
     <div class="step"><div><b>Sign in and set your address</b>Hold the clock's middle button: it scrolls its settings
-      address, user and password slowly, twice, with the password in groups like <span class="mono">K7PR 3XQ9 TMWA</span>
-      (the spaces aren't part of it). Open that address, sign in as <span class="mono">admin</span> and type your street
-      address.</div></div>
+      address, then the 12-character password four characters at a time (<span class="mono">K7PR</span>,
+      <span class="mono">3XQ9</span>, <span class="mono">TMWA</span>), each standing still. The left and right buttons step
+      back and forward. Open that address, sign in as <span class="mono">admin</span> and type your street address.</div></div>
   </div>
 </section>"""
 
@@ -225,7 +225,8 @@ def page4():
       network and shows the setup Wi-Fi again.</td></tr>
     <tr><td><span class="mono">overhead.local</span> doesn't open</td><td>Hold the middle button; open the number it
       scrolls, like <span class="mono">192.168.1.42</span>.</td></tr>
-    <tr><td>Forgot the admin password</td><td>Hold the middle button: it scrolls the password.</td></tr>
+    <tr><td>Forgot the admin password</td><td>Hold the middle button: it shows the password four characters at a
+      time; left and right step through it.</td></tr>
     <tr><td>It shows flight numbers, not cities</td><td>The route for that flight isn't known yet. Common at airports
       without a supported flight board; add one for yours (see CONTRIBUTING on GitHub).</td></tr>
     <tr><td>Nothing ever shows</td><td>Check the settings page: address found? Airport nearby? Inside quiet hours?

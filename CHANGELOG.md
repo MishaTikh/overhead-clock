@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+- The password is shown four characters at a time, each block standing still with a progress mark; the left and right
+  buttons page back and forward, the middle button closes. Same for the setup hotspot's Wi-Fi password.
+
 ## 0.1.1
 - Installs and updates over Wi-Fi: password-protected *Update firmware* on the settings page, a one-click Windows
   installer (`installer/Install-Overhead.bat`) that also handles clocks still on Ulanzi's firmware, and two firmware

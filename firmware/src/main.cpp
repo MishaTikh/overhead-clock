@@ -105,25 +105,34 @@ static void show_override(const std::string& text, double secs, uint32_t color =
     UNLOCK();
 }
 
-// Passwords are shown in blocks of four, slowly, twice: easier to read off the sign.
-// The spaces are only for reading; they aren't part of the password.
+// Credentials are shown slowly and in still blocks: easy to read off the sign.
 static const float CREDENTIAL_SPEED = 10.0f;  // px/s, about half the usual scroll speed
-static String group4(const String& pw) {
-    String out;
-    for (unsigned i = 0; i < pw.length(); i++) {
-        if (i && i % 4 == 0) out += "  ";
-        out += pw[i];
-    }
-    return out;
+
+// The address scrolls slowly, then the password is shown four characters at a time, each block
+// standing still for a few seconds with a progress mark on the bottom row. Left/right step through.
+static SignSequence credential_seq;
+static uint32_t credential_rgb = 0x00B4FF;
+
+static std::vector<SignStep> credential_steps(const std::string& header, const String& pw) {
+    std::vector<SignStep> steps;
+    Marquee m;
+    m.set_text(header, 0, CREDENTIAL_SPEED);
+    steps.push_back({header, m.seconds_for(1), false, CREDENTIAL_SPEED});
+    m.set_text("PASSWORD", 0, CREDENTIAL_SPEED);
+    steps.push_back({"PASSWORD", m.seconds_for(1), false, CREDENTIAL_SPEED});
+    int pages = (pw.length() + 3) / 4;
+    for (int p = 0; p < pages; p++)
+        steps.push_back({pw.substring(p * 4, p * 4 + 4).c_str(), 3.0, true, 0, p + 1, pages});
+    return steps;
 }
 
 static void show_credentials() {
     LOCK();
-    std::string msg = ("SETTINGS " + WiFi.localIP().toString() + "   USER ADMIN   PASSWORD  " + group4(admin_pw)).c_str();
+    std::string header = ("SETTINGS " + WiFi.localIP().toString() + "   USER ADMIN").c_str();
+    String pw = admin_pw;
+    override_until = 0;
+    credential_seq.start(credential_steps(header, pw), now_s(), 2, 2);  // password pages shown 3 times
     UNLOCK();
-    Marquee m;
-    m.set_text(msg, 0, CREDENTIAL_SPEED);
-    show_override(msg, m.seconds_for(2), 0x00B4FF, CREDENTIAL_SPEED);
 }
 
 static void apply_timezone() {
@@ -1241,8 +1250,24 @@ static void handle_buttons() {
         b.was = down;
         return rel;
     };
+    uint32_t held_l = 0, held_m = 0, held_r = 0;
+    bool rel_l = released(left, held_l), rel_m = released(mid, held_m), rel_r = released(right, held_r);
+    double now = now_s();
+    LOCK();
+    bool seq_on = credential_seq.active(now);
+    if (seq_on) {  // while the address and password are showing, the buttons page through them
+        if (rel_l) credential_seq.prev(now);
+        if (rel_r) credential_seq.next(now);
+        if (rel_m && held_m <= 1500) credential_seq.stop();
+    }
+    UNLOCK();
+    if (seq_on) {
+        if (rel_m && held_m > 1500) show_credentials();  // start over
+        return;
+    }
     uint32_t held;
-    if (released(left, held)) {
+    if (rel_l) {
+        held = held_l;
         if (held > 1500) {
             replay_recent();
         } else {
@@ -1251,7 +1276,8 @@ static void handle_buttons() {
             preview_format();
         }
     }
-    if (released(mid, held)) {
+    if (rel_m) {
+        held = held_m;
         if (held > 1500) {  // physical presence: how to reach the settings page
             show_credentials();
         } else {
@@ -1260,7 +1286,7 @@ static void handle_buttons() {
             show_override(S.mode ? "CLOCK" : "PLANES", 2, 0x00B4FF);
         }
     }
-    if (released(right, held)) {
+    if (rel_r) {
         S.brightness = (S.brightness + 1) % 4;
         save_settings_locked();
         static const char* names[] = {"AUTO", "LOW", "MEDIUM", "HIGH"};
@@ -1280,13 +1306,21 @@ static float brightness_base() {
 // ================================================================ setup / loop
 // The portal runs non-blocking so the sign can keep scrolling the network name and password.
 static void run_setup_portal(WiFiManager& wm, const String& ap_name, const String& ap_pw) {
-    Marquee m;
-    std::string msg = ("WIFI " + ap_name + "   PASSWORD  " + group4(ap_pw)).c_str();
-    m.set_text(msg, now_s(), CREDENTIAL_SPEED);
+    SignSequence seq;
+    std::vector<SignStep> steps = credential_steps(("WIFI " + ap_name).c_str(), ap_pw);
     uint8_t cols[MATRIX_W];
+    bool was_l = false, was_r = false;
     while (WiFi.status() != WL_CONNECTED) {
         wm.process();
-        m.frame(now_s(), cols);
+        double now = now_s();
+        if (!seq.active(now)) seq.start(steps, now, 2, 1000);  // loops for as long as setup takes
+        bool l = digitalRead(PIN_BTN_LEFT) == LOW, r = digitalRead(PIN_BTN_RIGHT) == LOW;
+        if (was_l && !l) seq.prev(now);
+        if (was_r && !r) seq.next(now);
+        was_l = l;
+        was_r = r;
+        for (auto& c : cols) c = 0;
+        seq.frame(now, cols);
         draw_columns(cols, CRGB(255, 0, 180));
         FastLED.setBrightness(30);
         FastLED.show();
@@ -1469,6 +1503,19 @@ static void render_frame() {
     static uint32_t last_rare_hex = 0;
     read_light();
     housekeeping(now_s());
+
+    {
+        uint8_t cols[MATRIX_W] = {0};
+        LOCK();
+        bool showing = credential_seq.frame(now_s(), cols);
+        UNLOCK();
+        if (showing) {
+            draw_columns(cols, rgb(credential_rgb));
+            FastLED.setBrightness((uint8_t)fmaxf(20, brightness_base()));
+            FastLED.show();
+            return;
+        }
+    }
 
     double now = now_s();
     std::string text;

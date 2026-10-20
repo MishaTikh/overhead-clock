@@ -46,8 +46,8 @@ Everything happens over Wi-Fi: no cables, drivers or flashing tools.
    (`overhead-installer.zip`), unzip it on a Windows PC on the same Wi-Fi and double-click **Install-Overhead.bat**.
    It finds the clock and installs Overhead in about 30 seconds.
    *On a Mac, Linux or phone:* open http://clock.local/update in a browser, choose `overhead-tc001-app.bin` and upload.
-3. **Sign in.** Hold the clock's middle button: it scrolls its settings address and password (slowly, twice). Open the
-   address, sign in as `admin` and type your street address. That's it.
+3. **Sign in.** Hold the clock's middle button: it shows its settings address, then the password four characters at a
+   time (left and right buttons step through). Open the address, sign in as `admin` and type your street address.
 
 Updating later works the same way: run the installer again, or use *Update firmware* on the settings page.
 Details and troubleshooting are in the [quick start guide](docs/Overhead-Quick-Start.pdf).
@@ -60,7 +60,7 @@ Details and troubleshooting are in the [quick start guide](docs/Overhead-Quick-S
 | Button | Press | Hold 1.5 s |
 |---|---|---|
 | Left | What to show for each plane: City, Codes, Airline, Full | Replay recent planes |
-| Middle | Clock + planes, or planes only | Show the settings address and password |
+| Middle | Clock + planes, or planes only | Show the settings address and password (left/right page through it, middle closes) |
 | Right | Brightness: Auto, Low, Medium, High | |
 
 Hold the left button while plugging the clock in to forget Wi-Fi and start setup again.

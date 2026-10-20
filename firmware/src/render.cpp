@@ -72,8 +72,9 @@ std::vector<uint8_t> text_columns(const std::string& text) {
     return cols;
 }
 
-void Marquee::set_text(const std::string& text, double now, float speed) {
+void Marquee::set_text(const std::string& text, double now, float speed, bool still) {
     speed_ = speed;
+    still_ = still;
     if (text == text_) return;
     text_ = text;
     t0_ = now;
@@ -92,6 +93,11 @@ void Marquee::frame(double now, uint8_t* out) const {
     int n = (int)cols_.size();
     for (int i = 0; i < w; i++) out[i] = 0;
     if (!n) return;
+    if (still_ && n <= w) {
+        int pad = (w - n) / 2;
+        for (int i = 0; i < n; i++) out[pad + i] = cols_[i];
+        return;
+    }
     int cycle = n + gap > w + 4 ? n + gap : w + 4;   // short names still scroll fully off before repeating
     double t = now - t0_ - SCROLL_HOLD_S;
     int off = t > 0 ? ((int)(t * (speed_ > 0 ? speed_ : S.scroll_speed))) % cycle : 0;
@@ -120,6 +126,82 @@ void clock_frame(int hour24, int minute, bool colon_on, bool h24, uint8_t* out) 
     for (int i = 0; i < MATRIX_W; i++) out[i] = 0;
     int pad = ((int)MATRIX_W - (int)cols.size()) / 2;
     for (size_t i = 0; i < cols.size() && pad + (int)i < MATRIX_W; i++) out[pad + i] = cols[i];
+}
+
+// ================================================================ sign sequence
+static const double MANUAL_TIMEOUT_S = 120.0;
+
+void SignSequence::enter(size_t i, double now) {
+    idx_ = i;
+    step_start_ = now;
+    const SignStep& s = steps_[i];
+    m_ = Marquee();
+    m_.set_text(s.text, now, s.speed, s.still);
+}
+
+void SignSequence::start(const std::vector<SignStep>& steps, double now, int repeat_from, int repeats) {
+    steps_ = steps;
+    manual_ = false;
+    repeat_from_ = repeat_from;
+    repeats_left_ = repeats;
+    last_input_ = now;
+    if (!steps_.empty()) enter(0, now);
+}
+
+void SignSequence::next(double now) {
+    if (steps_.empty()) return;
+    manual_ = true;
+    last_input_ = now;
+    enter((idx_ + 1) % steps_.size(), now);
+}
+
+void SignSequence::prev(double now) {
+    if (steps_.empty()) return;
+    manual_ = true;
+    last_input_ = now;
+    enter((idx_ + steps_.size() - 1) % steps_.size(), now);
+}
+
+bool SignSequence::active(double now) {
+    if (steps_.empty()) return false;
+    if (manual_) {
+        if (now - last_input_ > MANUAL_TIMEOUT_S) steps_.clear();
+        return !steps_.empty();
+    }
+    while (now - step_start_ >= steps_[idx_].secs) {  // automatic advance
+        double end = step_start_ + steps_[idx_].secs;
+        if (idx_ + 1 < steps_.size()) {
+            enter(idx_ + 1, end);
+        } else if (repeats_left_ > 0 && repeat_from_ >= 0) {
+            repeats_left_--;
+            enter((size_t)repeat_from_, end);
+        } else {
+            steps_.clear();
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SignSequence::frame(double now, uint8_t* out) {
+    if (!active(now)) return false;
+    m_.frame(now, out);
+    const SignStep& s = steps_[idx_];
+    if (s.pages > 0) {  // progress marks on the spare bottom row: one 3-dot mark per page, lit up to this one
+        int w = s.pages * 4 - 1, x0 = (MATRIX_W - w) / 2;
+        for (int p = 0; p < s.pages; p++)
+            for (int k = 0; k < 3; k++)
+                if (p < s.page) out[x0 + p * 4 + k] |= 0x80;
+    }
+    return true;
+}
+
+double SignSequence::total_seconds() const {
+    double t = 0;
+    for (auto& s : steps_) t += s.secs;
+    if (repeat_from_ >= 0)
+        for (size_t i = repeat_from_; i < steps_.size(); i++) t += repeats_left_ * steps_[i].secs;
+    return t;
 }
 
 }  // namespace ov
