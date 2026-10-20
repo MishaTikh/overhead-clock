@@ -14,8 +14,13 @@ The clock sits on a home network and talks to the internet, so it's built to nee
 This section says what it does and, just as important, what it doesn't protect against.
 
 ### Network exposure
-- **Outbound only.** No port forwarding, cloud account, remote access or over-the-air updates. Changing the firmware
-  needs a USB cable at the clock. Bluetooth is switched off and its memory released.
+- **Outbound only.** No port forwarding, cloud account or remote access. Bluetooth is switched off and its memory
+  released.
+- **Firmware updates** go over the home network to `/api/update`, with the same protections as any other change:
+  admin password, the custom header, the Host check and the per-device lockout. The image must be a valid ESP32
+  application whose checksum verifies, or the clock keeps its current firmware. Anyone who has the admin password can
+  install any firmware, so treat it like the device's root password. (USB flashing of the TC001 doesn't work reliably
+  from Windows, so updates over Wi-Fi are what make the clock maintainable.)
 - **On the home network** it answers on port 80 (the settings page and its API, behind the admin password) and to its
   `overhead.local` name. It advertises no services.
 - **Setup hotspot.** WPA2, with a random 12-character password per device that is shown only on the clock's own

@@ -299,6 +299,11 @@
       <label for="ntp_server">Time server</label>
       <div class="pair" style="flex: 1 1 240px"><input type="text" id="ntp_server" spellcheck="false" autocapitalize="off"><button class="btn" id="ntpbtn">Save</button></div>
     </div>
+    <div class="row">
+      <label for="fwfile">Update firmware <span class="hint">(an overhead-tc001-app.bin from the project's releases)</span></label>
+      <div class="pair" style="flex: 1 1 240px"><input type="file" id="fwfile" accept=".bin"><button class="btn" id="fwbtn">Update</button></div>
+    </div>
+    <p class="msg" id="fwmsg"></p>
     <div class="confirm" id="forgetbox"></div>
   </section>
   <p class="hint" style="text-align:center">Overhead is open source (MIT). Flight data adsb.lol (ODbL) · routes VRS standing data
@@ -554,6 +559,26 @@
     try { await api("/api/password", { password: $("newpw").value }); $("newpw").value = ""; setMsg("pwmsg", "Password changed. Your browser will ask for the new one next time.", "ok"); }
     catch (e) { setMsg("pwmsg", e.message, "bad"); }
   };
+  $("fwbtn").onclick = () => {
+    const f = $("fwfile").files[0];
+    if (!f) { setMsg("fwmsg", "Choose the firmware file first.", "bad"); return; }
+    if (demo) { setMsg("fwmsg", "Demo: on a real clock this uploads " + f.name + " and restarts it.", "warn"); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/update");
+    xhr.setRequestHeader("X-Overhead", "1");
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = e => { if (e.lengthComputable) setMsg("fwmsg", `Uploading… ${Math.round(e.loaded / e.total * 100)}%`); };
+    xhr.onload = () => {
+      let r = {}; try { r = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status === 200) setMsg("fwmsg", "Updated. The clock is restarting; this page will reconnect in a moment.", "ok");
+      else setMsg("fwmsg", r.error || `The clock answered ${xhr.status}.`, "bad");
+    };
+    xhr.onerror = () => setMsg("fwmsg", "The upload was interrupted. The clock keeps its current firmware.", "bad");
+    $("fwbtn").disabled = true;
+    xhr.onloadend = () => { $("fwbtn").disabled = false; };
+    xhr.send(f);
+  };
+
   function renderForget(confirming) {
     const box = $("forgetbox");
     box.replaceChildren();

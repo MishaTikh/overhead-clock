@@ -3,8 +3,10 @@
 Thanks for helping. Bug reports, airport flight-board providers, fixes and ideas are all welcome.
 
 ## Getting set up
-- **Firmware**: [PlatformIO](https://platformio.org). `cd firmware && pio run -e tc001`, then
-  `pio run -e tc001 -t upload` with the clock on USB. The build embeds `ui/index.html` (the settings page).
+- **Firmware**: [PlatformIO](https://platformio.org). `cd firmware && pio run -e tc001`. Install the result
+  (`.pio/build/tc001/firmware.bin`) over Wi-Fi with `installer/Install-Overhead.bat` (drop the .bin onto it) or the
+  settings page's *Update firmware*. USB upload (`pio run -e tc001 -t upload`) works from Linux but not reliably from
+  Windows on the TC001. The build embeds `ui/index.html` (the settings page).
   On Windows with a long folder path, set `PLATFORMIO_WORKSPACE_DIR` to a short path such as `C:\pio\overhead`.
 - **Logic tests** run on a PC, no hardware needed:
   ```

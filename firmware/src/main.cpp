@@ -13,8 +13,9 @@
 //  - Changes require a JSON POST with a custom header, which browsers won't send cross-site.
 //  - Every outgoing connection is HTTPS to a fixed list of services, verified against pinned root
 //    certificates (root_cas.h). Home coordinates are rounded to ~1 km for flight-data requests.
-//  - Outbound only: no port forwarding, cloud account, remote access or over-the-air updates.
-//    Bluetooth is switched off and its memory released.
+//  - Outbound only: no port forwarding, cloud account or remote access. Firmware updates are accepted
+//    only from the home network, behind the admin password and the same request checks as settings,
+//    and must be a valid, checksummed ESP32 image. Bluetooth is switched off and its memory released.
 //
 // Fail-safe: whatever fails (Wi-Fi, internet, any service), the clock keeps telling the time.
 //  - A clock that has been set up never blocks on the setup hotspot; it shows the time and reconnects.
@@ -26,6 +27,7 @@
 #include <ESPmDNS.h>
 #include <FastLED.h>
 #include <HTTPClient.h>
+#include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -82,6 +84,7 @@ static double geo_lat = 0, geo_lon = 0;  // used instead of an address when coor
 static std::string override_text;
 static uint32_t override_rgb = 0xFF7800;
 static double override_until = 0;
+static float override_speed = 0;  // 0 = the scroll-speed setting
 
 static void display_task(void*);
 
@@ -93,12 +96,34 @@ static double now_s() {
 static bool time_valid() { return time(nullptr) > 1700000000; }
 static CRGB rgb(uint32_t c) { return CRGB((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF); }
 
-static void show_override(const std::string& text, double secs, uint32_t color = 0xFF7800) {
+static void show_override(const std::string& text, double secs, uint32_t color = 0xFF7800, float speed = 0) {
     LOCK();
+    override_speed = speed;
     override_text = text;
     override_rgb = color;
     override_until = now_s() + secs;
     UNLOCK();
+}
+
+// Passwords are shown in blocks of four, slowly, twice: easier to read off the sign.
+// The spaces are only for reading; they aren't part of the password.
+static const float CREDENTIAL_SPEED = 10.0f;  // px/s, about half the usual scroll speed
+static String group4(const String& pw) {
+    String out;
+    for (unsigned i = 0; i < pw.length(); i++) {
+        if (i && i % 4 == 0) out += "  ";
+        out += pw[i];
+    }
+    return out;
+}
+
+static void show_credentials() {
+    LOCK();
+    std::string msg = ("SETTINGS " + WiFi.localIP().toString() + "   USER ADMIN   PASSWORD  " + group4(admin_pw)).c_str();
+    UNLOCK();
+    Marquee m;
+    m.set_text(msg, 0, CREDENTIAL_SPEED);
+    show_override(msg, m.seconds_for(2), 0x00B4FF, CREDENTIAL_SPEED);
 }
 
 static void apply_timezone() {
@@ -937,6 +962,58 @@ static void api_restart() {
     ESP.restart();
 }
 
+// ---- firmware update: POST /api/update with the raw .bin as the body (same auth + header rules)
+static bool ota_allowed = false;
+static String ota_error;
+
+// The quiet version of authed() + write_ok() for the streaming callback (it can't send responses).
+static bool update_request_ok() {
+    AuthStrike& st = strike_for((uint32_t)web.client().remoteIP());
+    if (st.until && (int32_t)(st.until - millis()) > 0) return false;
+    return host_ok() && digest_uri_matches() && web.authenticate("admin", admin_pw.c_str()) &&
+           web.header("X-Overhead") == "1";
+}
+
+static void api_update_stream() {
+    HTTPRaw& raw = web.raw();
+    if (raw.status == RAW_START) {
+        ota_error = "";
+        ota_allowed = update_request_ok();
+        if (!ota_allowed) return;
+        show_override("UPDATING", 600, 0x00B4FF);
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) ota_error = Update.errorString();
+    } else if (raw.status == RAW_WRITE) {
+        if (ota_allowed && ota_error.isEmpty() && Update.write(raw.buf, raw.currentSize) != raw.currentSize)
+            ota_error = Update.errorString();
+    } else if (raw.status == RAW_END) {
+        if (ota_allowed && ota_error.isEmpty() && !Update.end(true)) ota_error = Update.errorString();
+    } else if (raw.status == RAW_ABORTED) {
+        if (ota_allowed) Update.abort();
+        ota_error = "upload interrupted";
+    }
+}
+
+static void api_update_done() {
+    if (!ota_allowed) {  // let authed()/write_ok() send the right challenge or refusal
+        JsonDocument body;
+        if (!authed()) return;
+        web.send(403, "application/json", "{\"error\":\"missing X-Overhead header\"}");
+        return;
+    }
+    JsonDocument d;
+    if (ota_error.length()) {
+        show_override("UPDATE FAILED", 6, 0xFF2020);
+        d["error"] = "Update failed: " + ota_error + ". The clock is still running the old firmware.";
+        send_json(d, 400);
+        return;
+    }
+    d["ok"] = true;
+    send_json(d);
+    show_override("RESTARTING", 3, 0x00B4FF);
+    delay(800);
+    ESP.restart();
+}
+
 static void handle_ui() {
     if (!authed()) return;
     web.sendHeader("Content-Security-Policy",
@@ -1176,10 +1253,7 @@ static void handle_buttons() {
     }
     if (released(mid, held)) {
         if (held > 1500) {  // physical presence: how to reach the settings page
-            LOCK();
-            std::string msg = ("SETTINGS " + WiFi.localIP().toString() + "  USER ADMIN  PASSWORD " + admin_pw).c_str();
-            UNLOCK();
-            show_override(msg, 30, 0x00B4FF);
+            show_credentials();
         } else {
             S.mode = S.mode ? 0 : 1;
             save_settings_locked();
@@ -1207,8 +1281,8 @@ static float brightness_base() {
 // The portal runs non-blocking so the sign can keep scrolling the network name and password.
 static void run_setup_portal(WiFiManager& wm, const String& ap_name, const String& ap_pw) {
     Marquee m;
-    std::string msg = ("WIFI " + ap_name + "  PASSWORD " + ap_pw).c_str();
-    m.set_text(msg, now_s());
+    std::string msg = ("WIFI " + ap_name + "   PASSWORD  " + group4(ap_pw)).c_str();
+    m.set_text(msg, now_s(), CREDENTIAL_SPEED);
     uint8_t cols[MATRIX_W];
     while (WiFi.status() != WL_CONNECTED) {
         wm.process();
@@ -1312,6 +1386,7 @@ void setup() {
     web.on("/api/password", HTTP_POST, api_password);
     web.on("/api/wifi/forget", HTTP_POST, api_forget_wifi);
     web.on("/api/restart", HTTP_POST, api_restart);
+    web.on("/api/update", HTTP_POST, api_update_done, api_update_stream);
     web.onNotFound([]() { security_headers(); web.send(404, "text/plain", "Not found"); });
     web.begin();
 
@@ -1322,7 +1397,7 @@ void setup() {
         geo_state = GeoState::Pending;
     }
     if (first_setup || (!location_set() && WiFi.status() == WL_CONNECTED))
-        show_override(("SETTINGS " + WiFi.localIP().toString() + "  USER ADMIN  PASSWORD " + admin_pw).c_str(), 40, 0x00B4FF);
+        show_credentials();
     else
         show_override("HELLO", 2);
 
@@ -1406,8 +1481,10 @@ static void render_frame() {
     UNLOCK();
     if (!overriding && !plane_active) rotation_override(now);
     LOCK();
+    float speed = 0;
     if (now < override_until) {
         text = override_text;
+        speed = override_speed;
         color = rgb(override_rgb);
         loud = 1;
         active = true;
@@ -1455,7 +1532,7 @@ static void render_frame() {
         }
         return;
     }
-    marquee.set_text(text, now);
+    marquee.set_text(text, now, speed);
     uint8_t cols[MATRIX_W];
     marquee.frame(now, cols);
     draw_columns(cols, color);

@@ -17,10 +17,11 @@ matrix). Live near an airport? When a plane roars over, the clock scrolls `DENVE
 being a clock. No computer, server or account: it just needs Wi-Fi.
 
 [![CI](https://github.com/MishaTikh/overhead-clock/actions/workflows/ci.yml/badge.svg)](https://github.com/MishaTikh/overhead-clock/actions/workflows/ci.yml)
-![Status: early, untested on hardware](https://img.shields.io/badge/status-0.1%20early-orange)
+![Status: early](https://img.shields.io/badge/status-0.1%20early-orange)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-> **Status:** 0.1 builds and passes its tests, but hasn't run on a real TC001 yet. Hardware testers welcome.
+> **Status:** 0.1 is early. It installs, boots and updates over Wi-Fi on a real TC001; the plane features are still
+> being tested day to day. Testers welcome.
 
 **[Quick start guide (PDF)](docs/Overhead-Quick-Start.pdf)**
 
@@ -37,11 +38,23 @@ being a clock. No computer, server or account: it just needs Wi-Fi.
 - **A dashboard on your phone:** today's planes, the hours planes usually pass over you, airport weather.
 
 ## Get started
-1. **Install the firmware** from Chrome or Edge with the clock on USB (about 5 minutes, details in the
-   [quick start](docs/Overhead-Quick-Start.pdf)).
-2. **Plug it in at home.** It scrolls the name and password of its setup Wi-Fi.
-3. **Join that Wi-Fi on your phone,** pick your home network and type your address.
-4. **Open the settings page** it shows (`http://overhead.local`, user `admin`) to pick colors and extras.
+Everything happens over Wi-Fi: no cables, drivers or flashing tools.
+
+1. **Put the clock on your Wi-Fi.** A new TC001 shows `192.168.4.1`: join the clock's Wi-Fi network on your phone,
+   open http://192.168.4.1 and choose your home network.
+2. **Install Overhead.** Download the latest [release](https://github.com/MishaTikh/overhead-clock/releases)
+   (`overhead-installer.zip`), unzip it on a Windows PC on the same Wi-Fi and double-click **Install-Overhead.bat**.
+   It finds the clock and installs Overhead in about 30 seconds.
+   *On a Mac, Linux or phone:* open http://clock.local/update in a browser, choose `overhead-tc001-app.bin` and upload.
+3. **Sign in.** Hold the clock's middle button: it scrolls its settings address and password (slowly, twice). Open the
+   address, sign in as `admin` and type your street address. That's it.
+
+Updating later works the same way: run the installer again, or use *Update firmware* on the settings page.
+Details and troubleshooting are in the [quick start guide](docs/Overhead-Quick-Start.pdf).
+
+> Flashing the TC001 over USB doesn't work reliably from Windows (its auto-reset circuit doesn't enter flashing mode
+> there), which is why installs go over Wi-Fi. On Linux or macOS, USB flashing with the merged image from the CI
+> build at address `0x0` also works.
 
 ## Buttons
 | Button | Press | Hold 1.5 s |
@@ -65,8 +78,8 @@ Hold the left button while plugging the clock in to forget Wi-Fi and start setup
   real-time clock), and it recovers on its own.
 
 ## Privacy and security
-Outbound only: no cloud account, port forwarding, remote access or over-the-air updates. The setup hotspot and the
-settings page are password protected, every connection is verified HTTPS, and your exact address never goes to the
+Outbound only: no cloud account, port forwarding or remote access. Firmware updates are accepted only from your home
+network, behind the admin password. The setup hotspot and the settings page are password protected, every connection is verified HTTPS, and your exact address never goes to the
 flight-data service. Prefer not to send your address anywhere? Enter coordinates instead. Details in
 [SECURITY.md](SECURITY.md).
 

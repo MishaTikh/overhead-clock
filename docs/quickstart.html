@@ -49,24 +49,24 @@ code, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 9pt;
   <h2 style="margin-top:12pt">What you need</h2>
   <div class="grid3">
     <div class="card"><b>Ulanzi TC001</b><br>The pixel clock (about $40&ndash;50). Nothing to open or solder.</div>
-    <div class="card"><b>USB-C data cable</b><br>For a one-time install from a computer. Some cables only charge.</div>
-    <div class="card"><b>Chrome or Edge</b><br>On a computer, for the installer. Then a phone for setup.</div>
+    <div class="card"><b>Your phone</b><br>To put the clock on your Wi-Fi and to use its settings page.</div>
+    <div class="card"><b>A Windows PC</b><br>For the one-click installer. Or any browser, using the clock's update page.</div>
   </div>
 
-  <h2 style="margin-top:12pt">Four steps</h2>
+  <h2 style="margin-top:12pt">Three steps, all over Wi-Fi</h2>
   <div class="steps">
-    <div class="step"><div><b>Install Overhead on the clock</b>Download <span class="mono">overhead-tc001.bin</span> from the
-      project's Releases page on GitHub (github.com/MishaTikh/overhead-clock). Plug the clock into the computer, open
-      <span class="mono">espressif.github.io/esptool-js</span> in Chrome or Edge, click Connect, pick the USB serial port,
-      add the file at address <span class="mono">0x0</span> and click Program. Takes about a minute.</div></div>
-    <div class="step"><div><b>Plug it in at home</b>The clock scrolls its setup Wi-Fi name and password, for example
-      <span class="mono">WIFI OVERHEAD-1A2B PASSWORD K7PR3XQ9TMWA</span>.</div></div>
-    <div class="step"><div><b>Connect it with your phone</b>Join that Wi-Fi network with the password shown. A setup page
-      opens (or go to <span class="mono">192.168.4.1</span>). Pick your home Wi-Fi, type its password and your street
-      address, then Save.</div></div>
-    <div class="step"><div><b>Open the settings page</b>The clock scrolls its address, user and password. On a phone or
-      computer on the same Wi-Fi, open <span class="mono">http://overhead.local</span> (or the number it shows), sign in
-      as <span class="mono">admin</span> and check the address was found.</div></div>
+    <div class="step"><div><b>Put the clock on your Wi-Fi</b>Plug it in. A new TC001 shows <span class="mono">192.168.4.1</span>:
+      join the clock's Wi-Fi network on your phone, open <span class="mono">http://192.168.4.1</span> and choose your home
+      network. The clock then joins it.</div></div>
+    <div class="step"><div><b>Install Overhead</b>On a Windows PC on the same Wi-Fi, download
+      <span class="mono">overhead-installer.zip</span> from the project's Releases page on GitHub
+      (github.com/MishaTikh/overhead-clock), unzip it and double-click <span style="font-weight:600">Install-Overhead.bat</span>. It finds the clock and
+      installs Overhead in about 30 seconds. On a Mac, Linux or a phone: open <span class="mono">http://clock.local/update</span>,
+      choose <span class="mono">overhead-tc001-app.bin</span> and upload.</div></div>
+    <div class="step"><div><b>Sign in and set your address</b>Hold the clock's middle button: it scrolls its settings
+      address, user and password slowly, twice, with the password in groups like <span class="mono">K7PR 3XQ9 TMWA</span>
+      (the spaces aren't part of it). Open that address, sign in as <span class="mono">admin</span> and type your street
+      address.</div></div>
   </div>
 </section>
 <section class="page">
@@ -138,8 +138,9 @@ code, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 9pt;
   <h2>Troubleshooting</h2>
   <table>
     <tr><th style="width:36%">If&hellip;</th><th>Try this</th></tr>
-    <tr><td>The installer can't find the clock</td><td>Use a different USB-C cable (some only charge) and Chrome or
-      Edge. On Windows, the CH340 USB driver may be needed.</td></tr>
+    <tr><td>The installer can't find the clock</td><td>Make sure the PC and clock are on the same Wi-Fi. Type the clock's
+      address when the installer asks (hold the middle button to see it).</td></tr>
+    <tr><td>Updating later</td><td>Run the installer again, or use <i>Update firmware</i> on the settings page.</td></tr>
     <tr><td>Your phone doesn't open the setup page</td><td>Stay on the clock's Wi-Fi and browse to
       <span class="mono">192.168.4.1</span>.</td></tr>
     <tr><td>You changed Wi-Fi or moved</td><td>Hold the left button while plugging the clock in. It forgets the old
@@ -167,5 +168,5 @@ code, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 9pt;
   affiliated with Ulanzi, any airline or airport, and it's for fun, not navigation or safety. Data from adsb.lol (ODbL),
   OurAirports, &copy; OpenStreetMap contributors, Open-Meteo (CC BY 4.0), NOAA aviationweather.gov and the US Census
   Geocoder.</p>
-  <p class="foot">github.com/MishaTikh/overhead-clock &middot; firmware 0.1</p>
+  <p class="foot">github.com/MishaTikh/overhead-clock &middot; firmware 0.1.1</p>
 </section></body></html>

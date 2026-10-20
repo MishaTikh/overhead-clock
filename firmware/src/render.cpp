@@ -72,7 +72,8 @@ std::vector<uint8_t> text_columns(const std::string& text) {
     return cols;
 }
 
-void Marquee::set_text(const std::string& text, double now) {
+void Marquee::set_text(const std::string& text, double now, float speed) {
+    speed_ = speed;
     if (text == text_) return;
     text_ = text;
     t0_ = now;
@@ -80,6 +81,12 @@ void Marquee::set_text(const std::string& text, double now) {
 }
 
 // Always a big-letter marquee: show the start of the text, hold briefly, then scroll left and repeat.
+double Marquee::seconds_for(int cycles) const {
+    int n = (int)cols_.size();
+    int cycle = n + 12 > MATRIX_W + 4 ? n + 12 : MATRIX_W + 4;
+    return SCROLL_HOLD_S + cycles * (double)cycle / (speed_ > 0 ? speed_ : S.scroll_speed);
+}
+
 void Marquee::frame(double now, uint8_t* out) const {
     const int w = MATRIX_W, gap = 12;
     int n = (int)cols_.size();
@@ -87,7 +94,7 @@ void Marquee::frame(double now, uint8_t* out) const {
     if (!n) return;
     int cycle = n + gap > w + 4 ? n + gap : w + 4;   // short names still scroll fully off before repeating
     double t = now - t0_ - SCROLL_HOLD_S;
-    int off = t > 0 ? ((int)(t * S.scroll_speed)) % cycle : 0;
+    int off = t > 0 ? ((int)(t * (speed_ > 0 ? speed_ : S.scroll_speed))) % cycle : 0;
     for (int i = 0; i < w; i++) {
         int k = (off + i) % cycle;
         out[i] = k < n ? cols_[k] : 0;

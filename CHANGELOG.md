@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+- Installs and updates over Wi-Fi: password-protected *Update firmware* on the settings page, a one-click Windows
+  installer (`installer/Install-Overhead.bat`) that also handles clocks still on Ulanzi's firmware, and two firmware
+  slots so an update never leaves the clock without working firmware.
+- The settings address and password scroll slowly, twice, with the password in groups of four.
+- Tested on a real TC001: install, first boot, sign-in and an update over Wi-Fi.
+
 ## 0.1.0 (unreleased, not yet tested on hardware)
 - First version of the Overhead firmware for the Ulanzi TC001.
 - Shows the flight over the house only while it's clearly audible (loudness model with sound travel time).

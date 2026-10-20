@@ -58,7 +58,11 @@ jobs:
             0x1000 $B/bootloader.bin 0x8000 $B/partitions.bin \
             0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
             0x10000 $B/firmware.bin
-          sha256sum release/overhead-tc001.bin | tee release/overhead-tc001.bin.sha256
+          cp $B/firmware.bin release/overhead-tc001-app.bin   # for installs and updates over Wi-Fi
+          sha256sum release/*.bin | tee release/SHA256SUMS
+          mkdir -p installer-pkg
+          cp ../installer/Install-Overhead.bat ../installer/install-overhead.ps1 release/overhead-tc001-app.bin installer-pkg/
+          (cd installer-pkg && zip -q ../release/overhead-installer.zip *)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: overhead-tc001-${{ github.sha }}
