@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.8
+Security hardening, after a review of the settings page, the update path and the internet fetches
+(see SECURITY.md). Updates from this version on need this version's settings page or installer.
+- Firmware updates carry the image's SHA-256 inside the Digest-signed URI; the clock refuses an image that doesn't
+  match it, so nothing on the network can swap the firmware in transit.
+- A captured sign-in header can't be replayed: requests are numbered per challenge and repeats are refused.
+- Request bodies are streamed with a 2 KB cap instead of buffered whole, so an unsigned-in client can't fill memory.
+- The settings page's Content-Security-Policy allows only its own script, by hash.
+- Every internet response is read with a size cap and a deadline.
+- A wrong password on the update endpoint counts toward the lockout and the upload is dropped at once.
+- Fixed: a multipart form POST to the update endpoint restarted the clock, without a password.
+
 ## 0.1.7
 - Smooth hand-offs: a plane's text scrolls in and pushes the time out, then scrolls on without stopping; when the
   plane has passed, the time scrolls back in. Button notices still switch instantly.

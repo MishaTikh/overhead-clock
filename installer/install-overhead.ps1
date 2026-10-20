@@ -109,10 +109,13 @@ try {
         $secure = Read-Host "Admin password" -AsSecureString
         $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
         Say "Uploading to Overhead's update page (about 30 seconds)..."
+        # the image's SHA-256 rides in the URL, which the Digest sign-in signs; the clock refuses an image that
+        # doesn't match it (so nothing on the network can swap the firmware in transit)
+        $sha = (Get-FileHash -Algorithm SHA256 $Firmware).Hash.ToLower()
         # the password goes to curl on stdin, not the command line
         $config = "user = `"admin:$($plain.Replace('\', '\\').Replace('"', '\"'))`""
         $code = $config | & $curl -s -m 300 -K - --digest -o $tmp -w "%{http_code}" `
-            -H "X-Overhead: 1" -H "Content-Type: application/octet-stream" --data-binary "@$Firmware" "http://$Clock/api/update"
+            -H "X-Overhead: 1" -H "Content-Type: application/octet-stream" --data-binary "@$Firmware" "http://$Clock/api/update?sha256=$sha"
         $plain = $null
     }
     $body = Get-Content $tmp -Raw -ErrorAction SilentlyContinue

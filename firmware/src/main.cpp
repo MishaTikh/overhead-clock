@@ -37,6 +37,7 @@
 #include <esp_task_wdt.h>
 #include <esp_system.h>
 #include <esp_timer.h>
+#include <mbedtls/sha256.h>
 #include <Preferences.h>
 #include <sys/time.h>
 
@@ -212,13 +213,17 @@ static int https_get(HTTPClient& http, WiFiClientSecure& client, const String& u
     return http.GET();
 }
 
-// Reads an HTTP/1.1 body for ArduinoJson, undoing chunked transfer encoding when the server uses it.
+// Reads an internet response for ArduinoJson with a size cap and an overall deadline, so a service that
+// trickles or never stops can't hold the network task, and undoes chunked transfer encoding.
 class BodyReader {
 public:
-    BodyReader(Stream& s, bool chunked) : s_(s), chunked_(chunked) {}
+    BodyReader(Stream& s, bool chunked, size_t max_bytes = 64 * 1024, uint32_t max_ms = 15000)
+        : s_(s), chunked_(chunked), budget_(max_bytes), deadline_(millis() + max_ms) {}
     int read() {
-        if (!chunked_) return raw();
         if (done_) return -1;
+        if (budget_ == 0 || (int32_t)(millis() - deadline_) > 0) { done_ = true; return -1; }
+        budget_--;
+        if (!chunked_) return raw();
         if (left_ == 0) {  // chunk header: hex size, optional ";extension", CRLF
             long size = 0;
             bool digits = true;
@@ -254,6 +259,8 @@ private:
     Stream& s_;
     bool chunked_, done_ = false;
     long left_ = 0;
+    size_t budget_;
+    uint32_t deadline_;
 };
 
 static bool fetch_aircraft(double home_lat, double home_lon, std::vector<Fix>& out) {
@@ -280,7 +287,7 @@ static bool fetch_aircraft(double home_lat, double home_lon, std::vector<Fix>& o
                           "gs", "track", "baro_rate", "geom_rate", "seen_pos", "dbFlags"})
         filter["ac"][0][k] = true;
     JsonDocument doc;
-    BodyReader body(http.getStream(), http.header("Transfer-Encoding").equalsIgnoreCase("chunked"));
+    BodyReader body(http.getStream(), http.header("Transfer-Encoding").equalsIgnoreCase("chunked"), 256 * 1024);
     DeserializationError err = deserializeJson(doc, body, DeserializationOption::Filter(filter),
                                                DeserializationOption::NestingLimit(6));
     http.end();
@@ -365,7 +372,8 @@ static bool lookup_vrs(const std::string& cs, bool departing, Route& r) {
     filter["_airports"][0]["iata"] = true;
     filter["_airports"][0]["location"] = true;
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    BodyReader body(http.getStream(), false);
+    DeserializationError err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
     http.end();
     if (err) return false;
     std::vector<std::pair<std::string, std::string>> ap;
@@ -387,7 +395,8 @@ static bool lookup_adsbdb(const std::string& cs, bool departing, Route& r) {
         filter["response"]["flightroute"][k]["municipality"] = true;
     }
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    BodyReader body(http.getStream(), false);
+    DeserializationError err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
     http.end();
     if (err) return false;
     JsonObject fr = doc["response"]["flightroute"];
@@ -446,7 +455,8 @@ static bool geocode_address(const String& address, double& lat, double& lon, Str
             filter["result"]["addressMatches"][0]["matchedAddress"] = true;
             filter["result"]["addressMatches"][0]["coordinates"] = true;
             JsonDocument doc;
-            bool ok = !deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+            BodyReader body(http.getStream(), false);
+            bool ok = !deserializeJson(doc, body, DeserializationOption::Filter(filter));
             http.end();
             JsonObject m = doc["result"]["addressMatches"][0];
             if (ok && !m.isNull()) {
@@ -468,7 +478,8 @@ static bool geocode_address(const String& address, double& lat, double& lon, Str
     filter[0]["lon"] = true;
     filter[0]["display_name"] = true;
     JsonDocument doc;
-    bool ok = !deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    BodyReader body(http.getStream(), false);
+    bool ok = !deserializeJson(doc, body, DeserializationOption::Filter(filter));
     http.end();
     if (!ok || !doc[0]["lat"].is<const char*>()) return false;
     lat = atof(doc[0]["lat"]);
@@ -488,7 +499,8 @@ static void lookup_elevation_tz(double lat, double lon, float& elev_ft, String& 
         filter["elevation"] = true;
         filter["timezone"] = true;
         JsonDocument doc;
-        if (!deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter))) {
+        BodyReader body(http.getStream(), false);
+        if (!deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
             if (doc["elevation"].is<float>()) elev_ft = doc["elevation"].as<float>() * 3.28084f;
             tz = doc["timezone"] | "";
         }
@@ -507,7 +519,8 @@ static void fetch_weather(const std::string& airport, double home_lat, double ho
     JsonDocument filter;
     for (const char* k : {"obsTime", "temp", "dewp", "wdir", "wspd", "wgst", "cover", "rawOb"}) filter[0][k] = true;
     JsonDocument doc;
-    bool ok = !deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    BodyReader body(http.getStream(), false);
+    bool ok = !deserializeJson(doc, body, DeserializationOption::Filter(filter));
     http.end();
     JsonObject m = doc[0];
     if (!ok || m.isNull()) return;
@@ -822,6 +835,49 @@ static bool digest_uri_matches() {
     return uri == web.uri();
 }
 
+// One value from the Authorization header: name="quoted" or name=bare (ends at a comma).
+static String digest_param(const String& a, const char* name) {
+    String key = String(name) + "=";
+    int i = -1;
+    for (int from = 0;; from = i + 1) {
+        i = a.indexOf(key, from);
+        if (i < 0) return "";
+        if (i == 0 || a[i - 1] == ' ' || a[i - 1] == ',') break;  // a whole name, not the tail of another
+    }
+    i += key.length();
+    if (i < (int)a.length() && a[i] == '"') {
+        int j = a.indexOf('"', i + 1);
+        return a.substring(i + 1, j < 0 ? a.length() : j);
+    }
+    int j = a.indexOf(',', i);
+    String v = a.substring(i, j < 0 ? a.length() : j);
+    v.trim();
+    return v;
+}
+
+// The server library accepts a nonce any number of times, so a captured Authorization header could be
+// replayed (same path, any body) until the next challenge. Browsers and curl number their requests per
+// nonce ("nc"); a request whose number isn't higher than the last one seen for that nonce is refused.
+static String seen_nonce;
+static uint32_t seen_nc = 0;
+static bool digest_ok() {
+    if (!digest_uri_matches() || !web.authenticate("admin", admin_pw.c_str())) return false;
+    String a = web.header("Authorization");
+    String nonce = digest_param(a, "nonce");
+    uint32_t nc = strtoul(digest_param(a, "nc").c_str(), nullptr, 16);
+    if (nonce == seen_nonce && nc <= seen_nc) return false;
+    seen_nonce = nonce;
+    seen_nc = nc;
+    return true;
+}
+
+static void note_wrong_password(AuthStrike& st) {
+    if (++st.fails >= 5) {
+        uint32_t wait = 30000u << min(st.fails - 5, 4);  // 30 s, 1, 2, 4, 8 min
+        st.until = millis() + min(wait, 600000u);
+    }
+}
+
 static void security_headers() {
     web.sendHeader("Cache-Control", "no-store");
     web.sendHeader("X-Content-Type-Options", "nosniff");
@@ -842,17 +898,36 @@ static bool authed() {
         web.send(429, "text/plain", "Too many wrong passwords from this device. Wait a minute and try again.");
         return false;
     }
-    if (digest_uri_matches() && web.authenticate("admin", admin_pw.c_str())) {
+    if (digest_ok()) {
         st.fails = 0;
         st.until = 0;
         return true;
     }
-    if (web.hasHeader("Authorization") && ++st.fails >= 5) {  // a wrong password, not just the first challenge
-        uint32_t wait = 30000u << min(st.fails - 5, 4);          // 30 s, 1, 2, 4, 8 min
-        st.until = now + min(wait, 600000u);
-    }
+    if (web.hasHeader("Authorization")) note_wrong_password(st);  // a wrong password, not just the first challenge
     web.requestAuthentication(DIGEST_AUTH, "Overhead Clock", "Sign in as admin with the clock's password.");
     return false;
+}
+
+// Request bodies for the JSON endpoints are streamed in here with a hard cap, rather than buffered whole
+// by the server library: a client that hasn't signed in can't fill the clock's memory with a huge POST.
+static const size_t MAX_BODY = 2048;
+static String post_body;
+// Multipart form posts go through the server's form parser, which calls this with no raw body to read.
+static bool multipart_post() { return web.header("Content-Type").startsWith("multipart/"); }
+
+static void api_body_stream() {
+    if (multipart_post()) return;
+    HTTPRaw& raw = web.raw();
+    if (raw.status == RAW_START) {
+        post_body = "";
+    } else if (raw.status == RAW_WRITE) {
+        if (post_body.length() + raw.currentSize > MAX_BODY) {
+            post_body = "";
+            web.client().stop();  // too big: drop the connection, no response
+            return;
+        }
+        post_body.concat((const char*)raw.buf, raw.currentSize);
+    }
 }
 
 // Changes must be JSON with our header. Browsers won't send that cross-site without a CORS
@@ -863,8 +938,9 @@ static bool write_ok(JsonDocument& body) {
         web.send(403, "application/json", "{\"error\":\"missing X-Overhead header\"}");
         return false;
     }
-    String plain = web.arg("plain");
-    if (plain.length() > 2048 || deserializeJson(body, plain, DeserializationOption::NestingLimit(3)) || !body.is<JsonObject>()) {
+    String plain = post_body;
+    post_body = "";
+    if (deserializeJson(body, plain, DeserializationOption::NestingLimit(3)) || !body.is<JsonObject>()) {
         web.send(400, "application/json", "{\"error\":\"body must be a small JSON object\"}");
         return false;
     }
@@ -1110,42 +1186,73 @@ static void api_restart() {
     ESP.restart();
 }
 
-// ---- firmware update: POST /api/update with the raw .bin as the body (same auth + header rules)
+// ---- firmware update: POST /api/update?sha256=<hash of the .bin> with the raw .bin as the body.
+// Same auth and header rules as any change. The settings page is plain HTTP, and Digest only signs the
+// method and URI, not the body, so someone intercepting traffic on the Wi-Fi could swap the image in
+// transit. The hash in the URI is covered by the Digest signature; the clock hashes what it receives and
+// refuses the update unless they match. It's read from the signed Authorization header, not the request line.
 static bool ota_allowed = false;
-static String ota_error;
+static String ota_error, ota_expected_sha;
+static mbedtls_sha256_context ota_sha;
 
 // The quiet version of authed() + write_ok() for the streaming callback (it can't send responses).
 static bool update_request_ok() {
     AuthStrike& st = strike_for((uint32_t)web.client().remoteIP());
     if (st.until && (int32_t)(st.until - millis()) > 0) return false;
-    return host_ok() && digest_uri_matches() && web.authenticate("admin", admin_pw.c_str()) &&
-           web.header("X-Overhead") == "1";
+    if (!host_ok() || !digest_ok() || web.header("X-Overhead") != "1") return false;
+    String uri = digest_param(web.header("Authorization"), "uri");
+    int i = uri.indexOf("sha256=");
+    ota_expected_sha = i < 0 ? "" : uri.substring(i + 7, i + 7 + 64);
+    ota_expected_sha.toLowerCase();
+    return ota_expected_sha.length() == 64;
 }
 
 static void api_update_stream() {
+    if (multipart_post()) { ota_allowed = false; return; }
     HTTPRaw& raw = web.raw();
     if (raw.status == RAW_START) {
         ota_error = "";
         ota_allowed = update_request_ok();
-        if (!ota_allowed) return;
+        if (!ota_allowed) {
+            // a wrong password, stale signature or missing hash: don't read the whole image for nothing
+            if (web.hasHeader("Authorization")) {
+                note_wrong_password(strike_for((uint32_t)web.client().remoteIP()));
+                web.client().stop();
+            }
+            return;
+        }
         show_override("UPDATING", 600, 0x00B4FF);
+        mbedtls_sha256_init(&ota_sha);
+        mbedtls_sha256_starts_ret(&ota_sha, 0);
         if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) ota_error = Update.errorString();
     } else if (raw.status == RAW_WRITE) {
-        if (ota_allowed && ota_error.isEmpty() && Update.write(raw.buf, raw.currentSize) != raw.currentSize)
-            ota_error = Update.errorString();
+        if (!ota_allowed || !ota_error.isEmpty()) return;
+        mbedtls_sha256_update_ret(&ota_sha, raw.buf, raw.currentSize);
+        if (Update.write(raw.buf, raw.currentSize) != raw.currentSize) ota_error = Update.errorString();
     } else if (raw.status == RAW_END) {
-        if (ota_allowed && ota_error.isEmpty() && !Update.end(true)) ota_error = Update.errorString();
+        if (!ota_allowed || !ota_error.isEmpty()) return;
+        uint8_t out[32];
+        char hex[65];
+        mbedtls_sha256_finish_ret(&ota_sha, out);
+        mbedtls_sha256_free(&ota_sha);
+        for (int i = 0; i < 32; i++) snprintf(hex + 2 * i, 3, "%02x", out[i]);
+        if (ota_expected_sha != hex) {
+            Update.abort();
+            ota_error = "the image received doesn't match its hash (altered in transit, or the wrong file)";
+        } else if (!Update.end(true)) {
+            ota_error = Update.errorString();
+        }
     } else if (raw.status == RAW_ABORTED) {
-        if (ota_allowed) Update.abort();
+        if (ota_allowed) { Update.abort(); mbedtls_sha256_free(&ota_sha); }
         ota_error = "upload interrupted";
     }
 }
 
 static void api_update_done() {
-    if (!ota_allowed) {  // let authed()/write_ok() send the right challenge or refusal
-        JsonDocument body;
+    if (!ota_allowed) {  // let authed() send the right challenge or refusal
         if (!authed()) return;
-        web.send(403, "application/json", "{\"error\":\"missing X-Overhead header\"}");
+        web.send(web.header("X-Overhead") == "1" ? 400 : 403, "application/json",
+                 "{\"error\":\"update requests need the X-Overhead header and ?sha256= of the image, from this version's settings page or installer\"}");
         return;
     }
     JsonDocument d;
@@ -1166,7 +1273,7 @@ static void handle_ui() {
     if (!authed()) return;
     web.sendHeader("Content-Security-Policy",
                    "default-src 'none'; connect-src 'self'; style-src 'unsafe-inline'; "
-                   "script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+                   "script-src " UI_SCRIPT_CSP "; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
     web.send_P(200, "text/html; charset=utf-8", UI_HTML);
 }
 
@@ -1544,17 +1651,17 @@ void setup() {
 
     start_time_sync();
     // mDNS starts in loop() once Wi-Fi is up
-    static const char* hdrs[] = {"X-Overhead", "Authorization"};
-    web.collectHeaders(hdrs, 2);
+    static const char* hdrs[] = {"X-Overhead", "Authorization", "Content-Type"};
+    web.collectHeaders(hdrs, 3);
     web.on("/", HTTP_GET, handle_ui);
     web.on("/api/status", HTTP_GET, api_status);
     web.on("/api/settings", HTTP_GET, api_get_settings);
-    web.on("/api/settings", HTTP_POST, api_post_settings);
-    web.on("/api/locate", HTTP_POST, api_locate);
-    web.on("/api/preview", HTTP_POST, api_preview);
-    web.on("/api/password", HTTP_POST, api_password);
-    web.on("/api/wifi/forget", HTTP_POST, api_forget_wifi);
-    web.on("/api/restart", HTTP_POST, api_restart);
+    web.on("/api/settings", HTTP_POST, api_post_settings, api_body_stream);
+    web.on("/api/locate", HTTP_POST, api_locate, api_body_stream);
+    web.on("/api/preview", HTTP_POST, api_preview, api_body_stream);
+    web.on("/api/password", HTTP_POST, api_password, api_body_stream);
+    web.on("/api/wifi/forget", HTTP_POST, api_forget_wifi, api_body_stream);
+    web.on("/api/restart", HTTP_POST, api_restart, api_body_stream);
     web.on("/api/update", HTTP_POST, api_update_done, api_update_stream);
     web.onNotFound([]() { security_headers(); web.send(404, "text/plain", "Not found"); });
     web.begin();

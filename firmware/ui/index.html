@@ -564,12 +564,45 @@
     try { await api("/api/password", { password: $("newpw").value }); $("newpw").value = ""; setMsg("pwmsg", "Password changed. Your browser will ask for the new one next time.", "ok"); }
     catch (e) { setMsg("pwmsg", e.message, "bad"); }
   };
-  $("fwbtn").onclick = () => {
+  // SHA-256 (the page is plain HTTP, where browsers don't offer crypto.subtle). The hash travels in the
+  // request's URI, which the Digest sign-in covers; the clock checks the image it receives against it.
+  function sha256hex(bytes) {
+    const K = [];
+    for (let i = 0, n = 2; K.length < 64; n++) {
+      if ([2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311].includes(n))
+        K.push(Math.floor((Math.cbrt(n) % 1) * 2 ** 32) >>> 0);
+    }
+    let h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    const len = bytes.length, padded = new Uint8Array(Math.ceil((len + 9) / 64) * 64);
+    padded.set(bytes); padded[len] = 0x80;
+    const dv = new DataView(padded.buffer);
+    dv.setUint32(padded.length - 8, Math.floor(len / 2 ** 29)); dv.setUint32(padded.length - 4, (len * 8) >>> 0);
+    const w = new Uint32Array(64), rotr = (x, n) => (x >>> n) | (x << (32 - n));
+    for (let off = 0; off < padded.length; off += 64) {
+      for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+      }
+      let [a, b, c, d, e, f, g, hh] = h;
+      for (let i = 0; i < 64; i++) {
+        const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25), ch = (e & f) ^ (~e & g), t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0;
+        const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22), maj = (a & b) ^ (a & c) ^ (b & c), t2 = (S0 + maj) >>> 0;
+        hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      h = h.map((v, i) => (v + [a, b, c, d, e, f, g, hh][i]) >>> 0);
+    }
+    return h.map(v => v.toString(16).padStart(8, "0")).join("");
+  }
+  $("fwbtn").onclick = async () => {
     const f = $("fwfile").files[0];
     if (!f) { setMsg("fwmsg", "Choose the firmware file first.", "bad"); return; }
     if (demo) { setMsg("fwmsg", "Demo: on a real clock this uploads " + f.name + " and restarts it.", "warn"); return; }
+    setMsg("fwmsg", "Checking the file…");
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    if (bytes.length < 100000 || bytes[0] !== 0xE9) { setMsg("fwmsg", "That doesn't look like an ESP32 firmware image (overhead-tc001-app.bin).", "bad"); return; }
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/update");
+    xhr.open("POST", "/api/update?sha256=" + sha256hex(bytes));
     xhr.setRequestHeader("X-Overhead", "1");
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.upload.onprogress = e => { if (e.lengthComputable) setMsg("fwmsg", `Uploading… ${Math.round(e.loaded / e.total * 100)}%`); };
@@ -581,7 +614,7 @@
     xhr.onerror = () => setMsg("fwmsg", "The upload was interrupted. The clock keeps its current firmware.", "bad");
     $("fwbtn").disabled = true;
     xhr.onloadend = () => { $("fwbtn").disabled = false; };
-    xhr.send(f);
+    xhr.send(bytes);
   };
 
   function renderForget(confirming) {

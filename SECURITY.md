@@ -17,10 +17,13 @@ This section says what it does and, just as important, what it doesn't protect a
 - **Outbound only.** No port forwarding, cloud account or remote access. Bluetooth is switched off and its memory
   released.
 - **Firmware updates** go over the home network to `/api/update`, with the same protections as any other change:
-  admin password, the custom header, the Host check and the per-device lockout. The image must be a valid ESP32
-  application whose checksum verifies, or the clock keeps its current firmware. Anyone who has the admin password can
-  install any firmware, so treat it like the device's root password. (USB flashing of the TC001 doesn't work reliably
-  from Windows, so updates over Wi-Fi are what make the clock maintainable.)
+  admin password, the custom header, the Host check and the per-device lockout. On top of that the sender puts the
+  image's SHA-256 in the request's URI, which the Digest sign-in signs, and the clock hashes what it receives and
+  refuses an image that doesn't match: someone intercepting traffic on the Wi-Fi can't swap the firmware in transit.
+  The image must also be a valid ESP32 application whose checksum verifies, or the clock keeps its current firmware.
+  Anyone who has the admin password can install any firmware, so treat it like the device's root password. (USB
+  flashing of the TC001 doesn't work reliably from Windows, so updates over Wi-Fi are what make the clock
+  maintainable.)
 - **On the home network** it answers on port 80 (the settings page and its API, behind the admin password) and to its
   `overhead.local` name. It advertises no services.
 - **Setup hotspot.** WPA2, with a random 12-character password per device that is shown only on the clock's own
@@ -37,9 +40,14 @@ This section says what it does and, just as important, what it doesn't protect a
 - **Cross-site requests.** Changes must be JSON with a custom `X-Overhead` header, which browsers won't send from
   another website without a CORS preflight the clock never approves.
 - **DNS rebinding.** Requests must be addressed to the clock by its IP address or `overhead.local`.
-- **Framing and scripts.** Pages can't be framed, and a strict Content-Security-Policy is set. Device data shown on the
-  page (flight numbers, cities, network names) is escaped.
-- **Replay.** A Digest header only works for the path it was made for.
+- **Framing and scripts.** Pages can't be framed, and a strict Content-Security-Policy allows only the settings page's
+  own script, identified by its hash: an injected script could never run. Device data shown on the page (flight
+  numbers, cities, network names) is escaped as well.
+- **Replay.** A Digest header only works for the path it was made for, and only once: browsers number their requests
+  per challenge, and a request whose number isn't higher than the last one seen is refused. So a captured header can't
+  be replayed to restart the clock, forget its Wi-Fi or change a setting.
+- **Big requests.** Request bodies are streamed with a 2 KB cap (the firmware image excepted); a client that hasn't
+  signed in can't fill the clock's memory with a huge POST.
 - **Slow clients.** The display runs in its own task, so a slow or hostile web client can delay the settings page but
   can't freeze the clock or trigger the watchdog.
 
@@ -50,6 +58,9 @@ password itself off the wire, but:
 - Someone who can intercept traffic on your Wi-Fi could alter pages in transit, or capture a Digest exchange and try
   to guess the password offline. A random 12-character password (the default) resists that; a short or common one
   doesn't.
+- The web server library reads request headers into memory without a size limit, so a device on your network could
+  make the clock run short of memory for a moment, or restart it, by sending an enormous request. It can't get in that
+  way; the clock just comes back to the time.
 
 So keep the clock on a network you trust (your home Wi-Fi, not a shared or public one), and if you change the admin
 password, make it long.
@@ -57,8 +68,10 @@ password, make it long.
 ### Outgoing connections
 - **HTTPS only,** to a fixed list of services (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). Each is verified
   against pinned root certificates in `firmware/src/root_cas.h`. Redirects aren't followed.
-- **Bounded responses.** Responses are parsed with filters and size, nesting and time limits. Timeouts are short
-  (8 seconds) and back off when a service fails, capped at an hour even if the service asks for longer.
+- **Bounded responses.** Responses are parsed with filters and nesting limits, and read through a reader with a size
+  cap (64 KB; 256 KB for the aircraft list) and a 15-second deadline, so a service that trickles or never stops can't
+  hold the clock's network task. Timeouts are short (8 seconds) and back off when a service fails, capped at an hour
+  even if the service asks for longer.
 - **Certificate expiry.** Certificate dates aren't checked by the ESP32's TLS library; the pinned roots still decide
   who is trusted.
 - **Time (NTP)** comes from one server you can change on the settings page (Cloudflare's by default) and is unauthenticated. A forged time could shift the clock until the next good sync, but it isn't saved
