@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+- Fixed: no flight data. adsb.lol now refuses HTTP/1.0 requests (426 Upgrade Required); the clock asks it over
+  HTTP/1.1 and handles chunked replies.
+- The dashboard shows the last problem in plain text, and the clock's free memory.
+
 ## 0.1.4
 - Fixed: a short press on any button restarted the clock (saving the setting called itself until the
   stack ran out).

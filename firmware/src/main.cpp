@@ -196,10 +196,12 @@ static const char* UA = "overhead-clock/" FW_VERSION " (+" PROJECT_URL ")";
 
 // HTTPS GET with certificate verification and no redirects. Caller reads the stream, then http.end().
 // Timeouts stay well under the 15 s watchdog: stream reads busy-wait on core 0.
-static int https_get(HTTPClient& http, WiFiClientSecure& client, const String& url, uint32_t timeout_ms = 8000) {
+// http11: for services that refuse HTTP/1.0 (adsb.lol answers 426); read the body through BodyReader.
+static int https_get(HTTPClient& http, WiFiClientSecure& client, const String& url, uint32_t timeout_ms = 8000,
+                     bool http11 = false) {
     client.setCACert(ROOT_CAS);
     client.setHandshakeTimeout(8);
-    http.useHTTP10(true);  // no chunked encoding, so the stream can be parsed directly
+    http.useHTTP10(!http11);  // HTTP/1.0: no chunked encoding, so the stream can be parsed directly
     http.setTimeout(timeout_ms);
     http.setReuse(false);
     http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
@@ -208,15 +210,59 @@ static int https_get(HTTPClient& http, WiFiClientSecure& client, const String& u
     return http.GET();
 }
 
+// Reads an HTTP/1.1 body for ArduinoJson, undoing chunked transfer encoding when the server uses it.
+class BodyReader {
+public:
+    BodyReader(Stream& s, bool chunked) : s_(s), chunked_(chunked) {}
+    int read() {
+        if (!chunked_) return raw();
+        if (done_) return -1;
+        if (left_ == 0) {  // chunk header: hex size, optional ";extension", CRLF
+            long size = 0;
+            bool digits = true;
+            for (;;) {
+                int c = raw();
+                if (c < 0) { done_ = true; return -1; }
+                if (c == '\n') break;
+                if (c == ';' || c == '\r') digits = false;
+                if (!digits) continue;
+                int v = isdigit(c) ? c - '0' : (c >= 'a' && c <= 'f') ? c - 'a' + 10 : (c >= 'A' && c <= 'F') ? c - 'A' + 10 : -1;
+                if (v < 0 || size > 0x7FFFFF) { done_ = true; return -1; }
+                size = size * 16 + v;
+            }
+            if (size == 0) { done_ = true; return -1; }
+            left_ = size;
+        }
+        int c = raw();
+        if (c < 0) { done_ = true; return -1; }
+        if (--left_ == 0) { raw(); raw(); }  // CRLF after the chunk
+        return c;
+    }
+    size_t readBytes(char* buf, size_t n) {
+        size_t i = 0;
+        for (; i < n; i++) {
+            int c = read();
+            if (c < 0) break;
+            buf[i] = (char)c;
+        }
+        return i;
+    }
+private:
+    int raw() { char c; return s_.readBytes(&c, 1) == 1 ? (uint8_t)c : -1; }  // waits up to the stream timeout
+    Stream& s_;
+    bool chunked_, done_ = false;
+    long left_ = 0;
+};
+
 static bool fetch_aircraft(double home_lat, double home_lon, std::vector<Fix>& out) {
     WiFiClientSecure client;
     HTTPClient http;
     char url[96];
     // centre rounded to 0.01 deg (~1 km): plenty for a 25 nm search, and keeps the exact house private
     snprintf(url, sizeof(url), "https://api.adsb.lol/v2/point/%.2f/%.2f/%d", home_lat, home_lon, FEED_RADIUS_NM);
-    static const char* keep[] = {"Retry-After"};
-    http.collectHeaders(keep, 1);
-    int code = https_get(http, client, url);
+    static const char* keep[] = {"Retry-After", "Transfer-Encoding"};
+    http.collectHeaders(keep, 2);
+    int code = https_get(http, client, url, 8000, true);
     if (code != 200) {
         set_error(code < 0 ? "flight data: connection or certificate error" : String("flight data: HTTP ") + code);
         // back off: honour Retry-After, otherwise double the wait (1 min .. 30 min)
@@ -232,7 +278,8 @@ static bool fetch_aircraft(double home_lat, double home_lon, std::vector<Fix>& o
                           "gs", "track", "baro_rate", "geom_rate", "seen_pos", "dbFlags"})
         filter["ac"][0][k] = true;
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter),
+    BodyReader body(http.getStream(), http.header("Transfer-Encoding").equalsIgnoreCase("chunked"));
+    DeserializationError err = deserializeJson(doc, body, DeserializationOption::Filter(filter),
                                                DeserializationOption::NestingLimit(6));
     http.end();
     if (err) {
@@ -765,6 +812,8 @@ static void api_status() {
     feed["budget"] = S.daily_budget;
     feed["next_poll_s"] = (int)fmax(0, next_poll - now);
     feed["error"] = last_error;
+    d["free_heap"] = ESP.getFreeHeap();
+    d["min_free_heap"] = ESP.getMinFreeHeap();
     JsonObject loc = d["location"].to<JsonObject>();
     loc["set"] = location_set();
     loc["address"] = S.address.c_str();
