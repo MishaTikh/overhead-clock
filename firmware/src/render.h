@@ -22,6 +22,7 @@ public:
     // Fills 32 column bytes for time `now`.
     void frame(double now, uint8_t* out) const;
     const std::string& text() const { return text_; }
+    void restart(double t0) { t0_ = t0; }   // start the hold-then-scroll again from time t0
 private:
     std::string text_;
     std::vector<uint8_t> cols_;

@@ -1656,7 +1656,7 @@ static void render_frame() {
     std::string text;
     CRGB color;
     float loud = 0;
-    bool active = false, rare = false;
+    bool active = false, rare = false, notice = false;
     float inbound = -1;
     LOCK();
     bool overriding = now < override_until, plane_active = tracker.msg.active;
@@ -1670,6 +1670,7 @@ static void render_frame() {
         color = rgb(override_rgb);
         loud = 1;
         active = true;
+        notice = true;
     }
     UNLOCK();
     if (active) {
@@ -1690,51 +1691,108 @@ static void render_frame() {
     }
 
     float base = brightness_base();
-    if (!active && inbound > 0) {  // a plane is about to be audible: plane icon flying toward the countdown
-        uint8_t cols[MATRIX_W];
+    // What to show: the picture's columns, its color, its brightness and its kind (for transitions).
+    enum Kind { DARK, CLOCK, INBOUND, PLANE, NOTICE };
+    Kind kind;
+    uint8_t cols[MATRIX_W] = {0};
+    CRGB col_color = CRGB::Black;
+    float bright;
+    if (active) {
+        kind = notice ? NOTICE : PLANE;
+        col_color = color;
+        bright = base * (S.brightness ? 1.0f : 0.55f + 0.45f * loud);
+    } else if (inbound > 0) {  // a plane is about to be audible: plane icon flying toward the countdown
+        kind = INBOUND;
         inbound_frame(inbound, cols);
-        draw_columns(cols, rgb(S.plane_rgb));
-        FastLED.setBrightness((uint8_t)fmaxf(1, base * 0.8f));
-        FastLED.show();
-        return;
+        col_color = rgb(S.plane_rgb);
+        bright = base * 0.8f;
+    } else if (S.mode == 1 && time_valid()) {  // classic clock between planes (also during quiet hours)
+        kind = CLOCK;
+        time_t tt = (time_t)now;
+        struct tm lt;
+        localtime_r(&tt, &lt);
+        clock_frame(lt.tm_hour, lt.tm_min, (tt % 2) == 0, S.clock_24h, cols);
+        col_color = rgb(S.clock_rgb);
+        bright = base * 0.6f;
+    } else {
+        kind = DARK;
+        bright = base;
     }
-    if (!active) {
-        marquee.set_text("", now);
-        if (S.mode == 1 && time_valid()) {  // classic clock between planes (also during quiet hours)
-            time_t tt = (time_t)now;
-            struct tm lt;
-            localtime_r(&tt, &lt);
-            uint8_t cols[MATRIX_W];
-            clock_frame(lt.tm_hour, lt.tm_min, (tt % 2) == 0, S.clock_24h, cols);
-            draw_columns(cols, rgb(S.clock_rgb));
-            FastLED.setBrightness((uint8_t)fmaxf(1, base * 0.6f));
-            FastLED.show();
+
+    // Push transition: when the picture changes between the clock (or dark) and a plane, the old one slides
+    // out to the left as the new one slides in. Button notices switch instantly.
+    static Kind shown = DARK;
+    static uint8_t last_cols[MATRIX_W] = {0}, from_cols[MATRIX_W] = {0};
+    static CRGB last_color = CRGB::Black, from_color = CRGB::Black;
+    static float last_bright = 0, from_bright = 0;
+    static double trans_start = -1;
+    const int gap = 3;
+    const float trans_speed = S.scroll_speed > 0 ? S.scroll_speed : SCROLL_PX_PER_S;  // one continuous motion
+    const double trans_secs = (MATRIX_W + gap) / trans_speed;
+    if (kind != shown) {
+        if (kind != NOTICE && shown != NOTICE) {
+            memcpy(from_cols, last_cols, sizeof(from_cols));
+            from_color = last_color;
+            from_bright = last_bright;
+            trans_start = now;
         } else {
-            FastLED.clear(true);
+            trans_start = -1;
         }
-        return;
+        shown = kind;
+        if (kind == PLANE || kind == NOTICE) marquee.set_text("", now);  // the new text starts from its first letter
     }
-    marquee.set_text(text, now, speed);
-    uint8_t cols[MATRIX_W];
-    marquee.frame(now, cols);
-    draw_columns(cols, color);
-    if (rare) {  // sparkle: a few white twinkles in the dark pixels around the gold text
-        for (int k = 0; k < 4; k++) {
-            int x = random(MATRIX_W), y = random(MATRIX_H);
-            if (!(cols[x] & (1 << y))) leds[xy(x, y)] = CRGB(90, 90, 70);
+    bool sliding = trans_start >= 0 && now - trans_start < trans_secs;
+    if (active) {
+        marquee.set_text(text, now, speed);
+        // slid in at the scroll speed: keeps scrolling the moment it's in place, no pause on the first letters
+        if (sliding) marquee.restart(trans_start + trans_secs - SCROLL_HOLD_S);
+        marquee.frame(now, cols);
+    } else {
+        marquee.set_text("", now);
+    }
+    memcpy(last_cols, cols, sizeof(last_cols));
+    last_color = col_color;
+    last_bright = bright;
+    if (sliding) bright = fmaxf(bright, from_bright);  // no sudden dimming while one slides out
+
+    FastLED.clear();
+    if (sliding) {
+        int off = (int)((now - trans_start) * trans_speed);
+        for (int x = 0; x < MATRIX_W; x++) {
+            int k = x + off;  // position on the strip: old picture, gap, new picture
+            uint8_t c = 0;
+            CRGB cc;
+            if (k < MATRIX_W) { c = from_cols[k]; cc = from_color; }
+            else if (k >= MATRIX_W + gap && k < 2 * MATRIX_W + gap) { c = cols[k - MATRIX_W - gap]; cc = col_color; }
+            for (int y = 0; y < MATRIX_H; y++)
+                if (c & (1 << y)) leds[xy(x, y)] = cc;
+        }
+    } else {
+        for (int x = 0; x < MATRIX_W; x++)
+            for (int y = 0; y < MATRIX_H; y++)
+                if (cols[x] & (1 << y)) leds[xy(x, y)] = col_color;
+        if (rare && kind == PLANE) {  // sparkle: a few white twinkles in the dark pixels around the gold text
+            for (int k = 0; k < 4; k++) {
+                int x = random(MATRIX_W), y = random(MATRIX_H);
+                if (!(cols[x] & (1 << y))) leds[xy(x, y)] = CRGB(90, 90, 70);
+            }
         }
     }
-    FastLED.setBrightness((uint8_t)fmaxf(1, base * (S.brightness ? 1.0f : 0.55f + 0.45f * loud)));
+    FastLED.setBrightness((uint8_t)fmaxf(1, bright));
     FastLED.show();
 }
 
 static void display_task(void*) {
     esp_task_wdt_add(nullptr);
+    // A steady 40 frames a second (not "draw, then wait"), so scrolling steps evenly: at the default
+    // 20 px/s every pixel step is exactly two frames. Drawing takes ~8 ms, leaving the rest of core 1
+    // for the settings page.
+    TickType_t wake = xTaskGetTickCount();
     for (;;) {
         esp_task_wdt_reset();
         handle_buttons();
         render_frame();
-        vTaskDelay(pdMS_TO_TICKS(33));
+        vTaskDelayUntil(&wake, pdMS_TO_TICKS(FRAME_MS));
     }
 }
 

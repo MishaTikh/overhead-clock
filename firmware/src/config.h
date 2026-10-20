@@ -4,7 +4,7 @@
 // address entered during setup, so nothing in this file is specific to one place.
 #pragma once
 
-#define FW_VERSION      "0.1.6"
+#define FW_VERSION      "0.1.7"
 #define PROJECT_URL     "https://github.com/MishaTikh/overhead-clock"
 #define HOSTNAME        "overhead"           // http://overhead.local
 #define MAX_AIRPORT_NM  60.0                 // nearest-airport search radius
@@ -45,6 +45,7 @@
 #define CLOCK_24H            0        // [web] 0 "9:45", 1 "21:45"
 #define SCROLL_PX_PER_S      20.0f    // [web]
 #define SCROLL_HOLD_S        1.2f     // pause on the first letters before scrolling
+#define FRAME_MS             25       // display frame period (40 fps)
 #define COLOR_BY_AIRLINE     1        // [web] 1 airline colors, 0 one color for all planes
 #define MAX_MILLIAMPS        900
 #define BRIGHT_MIN           6        // [web] auto brightness in a dark room (0-255)

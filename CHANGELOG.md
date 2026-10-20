@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7
+- Smooth hand-offs: a plane's text scrolls in and pushes the time out, then scrolls on without stopping; when the
+  plane has passed, the time scrolls back in. Button notices still switch instantly.
+- Steady 40 frames a second, so scrolling glides evenly.
+
 ## 0.1.6
 - The city shows straight away: a plane's route is looked up as soon as it's headed over the house (up to 10 minutes
   out), not when it's almost audible. If a lookup is still running, the sign waits up to 4 seconds for it rather than
