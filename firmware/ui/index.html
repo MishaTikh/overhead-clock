@@ -34,6 +34,7 @@
   .banner { background: var(--panel); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; font-size: 0.85rem; color: var(--muted); }
 
   .face { background: var(--face); border-radius: 10px; padding: 8px; }
+  #map { aspect-ratio: 2 / 1; }
   canvas { display: block; width: 100%; height: auto; aspect-ratio: 4 / 1; max-width: 100%; }
   .signline { display: flex; justify-content: space-between; gap: 8px; font-size: 0.82rem; color: var(--muted); margin-top: 6px; }
 
@@ -124,6 +125,12 @@
     </div>
     <p class="hint" id="t-hours-hint">Orange bars are today; grey bars are a usual day, learned over the first week.</p>
     <p class="msg" id="t-rare"></p>
+  </section>
+
+  <section aria-labelledby="h-map">
+    <h2 id="h-map">Where they came from</h2>
+    <div class="face"><canvas id="map" width="1040" height="520" aria-label="Map of the cities planes over the house came from"></canvas></div>
+    <p class="hint" id="map-hint">Every city a plane over the house came from (or was going to). Orange is today; grey is all time.</p>
   </section>
 
   <section aria-labelledby="h-wx">
@@ -380,6 +387,15 @@
       setTimeout(() => { Object.assign(status.location, { lookup: "ok", address: body.address || "", message: body.address ? body.address.toUpperCase() : "Coordinates saved" }); }, 1200);
       return Promise.resolve({ lookup: "pending" });
     }
+    if (path === "/api/map") return Promise.resolve({ home: { lat: 44.93, lon: -93.34 }, airport: "MSP", cities: [
+      { i: "DEN", c: "Denver", la: 39.86, lo: -104.67, t: true }, { i: "SEA", c: "Seattle", la: 47.45, lo: -122.31, t: true },
+      { i: "CLT", c: "Charlotte", la: 35.21, lo: -80.94, t: true }, { i: "AMS", c: "Amsterdam", la: 52.31, lo: 4.76, t: true },
+      { i: "ATL", c: "Atlanta", la: 33.64, lo: -84.43 }, { i: "LAX", c: "Los Angeles", la: 33.94, lo: -118.41 },
+      { i: "JFK", c: "New York", la: 40.64, lo: -73.78 }, { i: "ORD", c: "Chicago", la: 41.97, lo: -87.91 },
+      { i: "PHX", c: "Phoenix", la: 33.43, lo: -112.01 }, { i: "LHR", c: "London", la: 51.47, lo: -0.46 },
+      { i: "CDG", c: "Paris", la: 49.01, lo: 2.55 }, { i: "NRT", c: "Tokyo", la: 35.76, lo: 140.39 },
+      { i: "ANC", c: "Anchorage", la: 61.17, lo: -149.99 }, { i: "CUN", c: "Cancun", la: 21.04, lo: -86.87 },
+      { i: "FAR", c: "Fargo", la: 46.92, lo: -96.82 }, { i: "DSM", c: "Des Moines", la: 41.53, lo: -93.66 } ] });
     if (path === "/api/preview") { previewUntil = Date.now() + 10000; previewText = body.text.toUpperCase(); return Promise.resolve({}); }
     if (path === "/api/password") { if ((body.password || "").length < 8) return Promise.reject(new Error("Use 8 to 64 characters.")); return Promise.resolve({ ok: true }); }
     return Promise.resolve({ ok: true });
@@ -687,6 +703,75 @@
   }
   renderForget(false);
 
+  // ---------------- the map: a coastline outline (Natural Earth, public domain) and an arc from every city to home
+  const COAST = ["heBbp@KGe@Ba@JEHd@@r@S","zBu`@CLNPb@JZAOUHSi@WQASJHL","cwAr@gAXWRCJ_@JEHP@CL]`@K??F]NNFh@Kd@g@XIZJANND^CPORC\\DGOMENe@rAe@LJBONIc@E@E\\?`@Ye@I_@FGf@UJOUUKgAP","kfAyAq@o@G?KP]J@FL?CHLFJPMP@HUPV@D^PLHp@@ETFFKVGVFFI\\A@YRU?c@KMMDOCCO_@GW[","ny@{m@JFZAVCII[CYJ","ry@mo@r@Es@D","n{@gp@WFBDl@?HOc@@","bv@om@rAGHURG~@IGGeBFQFDDWDcADiBCSFEFh@H|B?","pdA{o@[Bj@JZEk@I","jdAgp@YBv@B]G","lh@qJMDRBJ@?IQA","no@qJ[JRBTIME","lr@oMa@@YLSAc@XQB@D]FNFv@?MIREJQ|@KFCGCRAXNP?WQ]G","va@a_@V\\MGKDDDm@FDLMCIVHNF@LCCOZLJ?MIRCz@?@EKGFCq@w@OEI?BD","ls@ug@m@J?H]DPD\\EJGn@RFIX@OIIa@g@J","fp@gl@SEgAPAHe@ESLo@Fc@Xb@HmAP]P]?DL`@Vv@[X@@Jw@XKRDLjASs@b@~ASVIEEx@S?Dx@BPGMMmACDEGIWSJOfAOMCv@Ul@HfAEjAGNGSGZ?DSOQgAMNJOLQOs@Ia@T@Je@E","`z@im@oABjAd@TAJOISSC","v}@ml@TMUG{@?EDRH_@FBP`@FpAW?Ei@@","jbAkn@e@CCHJHtBJ\\?BEi@ItB?m@Y}BRZQQGU@MP","xkAqn@kA[y@A@LfANz@?","|jAom@mABi@LhARXL?Fr@Hv@Sg@c@RKcAA","`gBwd@O@AFJ@XGSC","v~Agc@UFd@PLO]I","|qAw`@SADTONRGRY?EIB","jmAg^]PGJH@`@GXSTCDO{@N","hjB{f@{@HNDh@E@I","|`Aqp@}AHUP^AlAGSEVC@G","qScUa@E^TLIKE","mOaU@D\\@VGCGs@F","}]xFSt@DNDKBDAVt@~C`@LZKLk@A]IAIUFu@GWe@G[WCQG@Qc@EH","ogB|HKJD@DM","ggBxHBUIDCNH?","{rAhCE]CNHL","l]vo@eA?YHIRAHdBNxABXGCG{@Km@_@","lh@dq@wA@YOSFDHDHtAAb@K","dm@pk@c@AGa@[Kc@h@DVl@DX?IGl@DNE?GUG","|~@|k@mB@KHzA?\\K","rkA`m@CGiAB\\Jn@G","pnA|l@MEs@L`AG","sfBdLYTFBd@YNSc@R","k~AhAINDDFSROLECCa@V","q}ArB^HZKAE[@EIAH[M@KKACNRP","idBpEEDL?FKOD","adB~DTYE?OX","qcBdETA@KWL","wbB~CEHXMBIWL","eaBjCGDJAFKKF","w_BhBWVFFPSBOEB","qmB`XPVNFHGIODKTGOMA[h@y@G?YNSd@AMGDCNODa@CH\\NADR","aiBfZ[Ua@g@GNOGCF?H\\^GH^DP`@XLP?`@GBEc@c@[I","i{AnXK@AVHTDELLPAXw@a@FYE","ymAbSd@NHPjA@d@TZA^O?KME?a@n@mBIFFQOLNe@Ms@ALGMi@UsASY]AQMQGPICFIEIIBAMY[[GYTW@BKWe@g@G?INEKCy@TWEIHRPAFLRk@\\s@\\MEOo@?s@Oa@[jAMEONSnAo@ZQd@S@CTg@b@Cf@INHv@J`@NFZt@D`@`@Ff@VZKAIZPz@OJKFY\\IEIBMHLPBUa@@MZVFNNG?KTUCCz@UfBL","cr@uCBRXHJk@G_@a@l@","{oAv@UDEN^IX?CKY?","inAjAPKSACFDD","}nAk@AJK@AF@NHA@LGHD@FKDYIW","ykAQW?SMABNRrABBLQPKGc@G?HHCXRa@v@?JJDFEIORF@MLKASLDAr@RAAe@F?DMWcAQMg@F","ejAlEXMQCIDGDHD","yjAhD_@G@H\\DZA?GOCKD","}hAfDKACFn@DWQGD","ybA~BAFe@@EGc@FGLu@NTF|@IxB[MSo@H","g`ATIVM@ILDv@T?h@a@`AwAL_@PMn@{@k@D}@|@U?OLYXFNSF","ojA}FHOWFBPHI","skAgEEQK?BJOQ@PRXJMCE","_nAgDAVDPFSFHENDFVKDMEIJGNDLJCUWMEHOECIM?@OOHCP","mcAkJNE@QIGa@ECFLRNH","ckAgNTn@J_@[a@IDBJ","uwAoWPRBn@HL|@HZTLE?OpALSNL^JHHGCQRSSEk@c@}@ASc@MHg@[MWBWGKUCIj@","kyAoZMGCTZDPR^MHTT?BSIMUAKk@UT]H","mDqXIEKL@XPDFEBc@I@","mDsYMGCNFNFC@S","wFab@EHJNTK@G]E","rAsc@W?TRi@AT`@S@SXM@Q^WB@JHDEHNHfA@j@LJCo@W^CDGUEJICM]@CKLKVCDEGGDEJH?SHIUc@O?","`Hqh@BLULXLjAPpAISGj@Ic@C?Eh@CKM_@A]L]KYD_@Ia@?","ixAq`@Ed@]v@\\EJZQT?LNKJLBOEsAJQA[QIFGICCL","aiAyDXPc@g@ISCNVX","mkAkJCTBNJF?^m@HCN@HVUBFLKZAGKDE@FHKB[GFGq@_@D","gkAcF@IWD?FTN?S","mmAsFEVNEEPHD?MDABKK@?GJOQ@ED","jo@mDa@MCWKI]A_@WMDDJH@ERHHGNG?EOFUWG@GGGELM@MNg@?YHKIo@ANDEH_@HAN_@JKV[N}@BUF_@XOj@IBALNNEDc@@?ROKy@RIHBJWEcAHw@d@_@DQj@F`@fApAJ~A^nAPHBJr@Fz@\\PRFv@`BpBTJXA^GJK@HYPBLMFRb@\\H|@@Cd@`@HPGFDARMDIGEJ`@PF\\P?NJDLg@PFPVJJVXNETMHZ?XJBPF@dA_@","to@oCKZB`@GDNTH@HVVJH`@DB@TKHGICH^f@IRDF[TeA|BETyAv@UPC\\LzCJXAdAb@|AF@Gh@HJJ`AKBEYMDHh@VGD`@PN]DTNFRMfA","tm@~_@gAXOWa@EQVs@PFH\\ETLx@IhAm@","_[kq@eACCD]G]BFBdAHTCKGl@?","m`@am@o@QDIm@ImEYMFLDbCP|@R\\R^PCPe@NjAADGb@E@ISC@Kg@OPA","cPaq@\\Jx@@x@Ct@MmBGyAJ","mNuo@j@Hb@EMCJGi@Cc@J","mHyp@GE]AyATp@FHNPBHNV?h@KQEdAWNOw@EID[?","to@oCHQCCPMXLGNFBH@BKF@BGb@E@MTODC@HJE?Wf@c@GABER@t@MdAm@d@HhCs@f@_@BIEAAQL[n@o@PG?Ox@s@Pk@NGPCA^}@dAQn@I?OPJJDKd@Y@Yv@a@I?GQXSb@cAVSh@KjAqBCa@DOKu@Nu@_@BIPEEH_@v@[b@GJQAKVIBOVM?I\\MDQVOJQp@A`AYpAI|@QTBCLhANBIISUEDEbAd@MHPNh@Lh@Z~B^{@]WAy@_@MYh@HJIDDFI^FAQJGXB\\M@KLG]_@]?m@MLKMGf@Hj@AZE`@SgAQO?@Hi@?hAe@ZGKI{@IYQiBUm@LuEHmCXi@M]@}@MMFSMm@R[MANw@G}BPYHZHkBASJUIRGKGg@Ae@Nw@F}@CBKQC_@F?PKOO?ISl@SAUWMm@J[TPHe@B@R[OWLDLQLc@_@AUy@BYHAHNJMH@Hd@Lp@C\\b@VLj@H@JTBl@d@Hf@]@Q`@[CuBf@u@BCb@MT]ROEIUH]LK_@Ga@[N_@VMWUNo@uAAo@Xc@?Eh@a@N[K_@]_A`AFLk@Tm@JGNUHAVtAd@~B?h@Tr@l@OCa@Yg@O]AQHPJKd@YHa@CSUALKFnBn@LA@Qc@Ot@BAD|@THJBNEHG?@EEB@DhALc@?h@@BTLNJKGTNVCMHGBQATLAMDKl@LNt@Xj@h@?ZW|@D`@N?HMVg@?WVSRHXOv@@F@GPRBZKj@?`Ad@?d@NdAMb@Yb@]L{@OKGIa@_AIELNVBXHC@f@HJmAA_@LCRLx@[b@","pr@_EEJOBo@O_@P","xk@iKa@@a@RFFl@AFLRK\\BJEAGi@?HOJACE]B","gHyVMABTBHNGd@KCIk@?","mV}Zq@X","wqA}S]QQJJJFENNJE?I","dI}J?SNQAQSc@QOMc@c@a@QAi@c@BYI[o@]Sa@iAJiA[kAASGi@BUGM@?HQCHHEL@PLHCHWLiANIPcATSMDOEG[K[BEFg@JY?o@Li@MMBEHCG_@DOI[}@AWDIGG\\ALJ\\@NITAPJRKT?X]IOJIUQ]AGMe@@o@Qa@?}@Ti@AWI@U~As@MCOOHG[MpAR?J]BBFn@LJCCGREUKDC^C?GR@T^N@BVPTGRQDBBV@VNDKVAVBMJH@TIBBOTFBSN?HPCEHJ@GPL?NGJ]`@g@A[dAc@NMDQJADFDECINANDEXq@h@O?EDDBs@XBFZKHJOF@HRPF@GULS`Aa@^WDSXIn@Xd@E\\D@VPLXBT`@GJNTLBLLl@?RNHAJQn@?A[LGMi@Bc@FG[MyBDIKCg@b@_@\\G@M{@@DWQHm@OEOk@MQ]o@KSBMIL]?SGKi@KFNMFXREPUB@F_@I_@LeAUi@HCI[EB_@IKQGONO?E[RC@Ks@Gi@@UIRIfBL^QCSFQGKmAe@@GZI`@DRLCJfA`@LZa@VPTTDPr@VAJNV?p@qAf@VZBXILcAmBq@uAaAwAg@kAG]OiAC}@LXDUJSEcDf@OF?LTH^DfBK_@LA\\i@JAIJIMEo@JOEJMm@Sc@FKMNKIKLKw@FIHV@?JMD_@CCKoB[O@RJY@oAOUJWKTKKEy@DcBZMITOVAGGJU_Ag@u@BCJRNSRBZUJn@h@U@u@_@JIGMTABIOSXOc@MBMSHFRU@HMa@Gi@?c@JPQ@S}BENKWKwBQeA@qAIWQo@Ga@DZDm@@CHmAC{@PBHxATgABILi@I_ABCHsA@AMiA@_@JIJJFw@VSS_@FwBANQ[GsDJeAZwBAOF@NWDkCCa@PWENMIGgBBuAP","ooBsg@XHXAg@^BLb@ChANbAb@ZMr@NHGPHZC\\`@AFUB@ZR@FNGF`@JFT\\BDTZPZwAI[QK?G_@EiB{@O]V@JPr@TNYr@Fp@^OLhAD?M\\CXH|BBlCtA_@@IJSBKIU@[TAPNRHv@d@h@`Ax@ZJVIl@ZDRj@T@JQJWb@?VFHr@LAYHSOCLOP?JGIKAQRE~@RU]JIr@^R@HHKJOB?HOBUM_@FAJZBd@b@SHa@t@?NJBOPF^J@n@fAv@`@`@JFEJFn@LFTH??UZEb@RNPBL_AjAGd@@`@nA|@FKEM^MP_@b@GCOP?PrAM?Kb@q@d@GJAh@M\\L@h@_@Vq@@W^e@BJ@KK{@^mBb@VVEEYBQNWCEXSRi@P?BRXE@Fd@B?NHHZLx@p@?Fd@LFlBJ@FNEDPDNPPQ`@kAHe@P[PkBZJLAXWGGDEd@UR]`BDpAKFYHAb@J~@[Zk@VCPDOl@[R@NMTCWKBBVGJk@Ao@m@?\\GLe@JUXXd@LB@XTDDLRD?Fx@NBNr@PPL|@LJJ\\@Ps@?_@`@u@b@c@?YJURKn@kAH?E[Rd@\\m@a@jA_@j@BN[TKbAQJQh@oAdA?FJD[XI?aC_@@Z\\jAb@r@rCfCTh@HVAJKDB`@Yl@ElALZt@\\r@j@@LQ^@f@x@^EHFh@n@v@d@`@n@T~@?z@PVMH]EC?Mz@{APcBp@oA?m@Mm@U]AYN]EKXgA|@mASsAFKPUr@H^g@n@BlAZr@Ix@P\\IbAq@n@gAb@Y@[PUU[C{@","~mBsi@n@O","umAfD[?j@RLLP@IQe@Q","noB|s@QKc@F]G[F]Gy@C{@LqDNy@EeCHkBKCGnCEdAKQWBIlAQ}AA]DsASFGt@IrBEv@UDU[FaACOF_@AgBQFOEEYCKDuDWuHBsBO_@RSEiANu@EuAFIGVMVAV]{AD[L[?mAGm@@QMOFo@@OFiAFWOqAPqCSQCQOZm@QW@WGGuAm@gBYKBFFvAPJLIL^Df@\\q@V[\\Up@@HfA^zBXbC@EF_ANrAH@Ns@TyHh@]NgD]kCFg@MuFUVM?EtBBBWIC_C[_CKcBSc@KEGTCUO}@Mg@Uy@FIOs@JgAEIF}Ca@c@@YNs@OY?GFOGcAAk@BUJyACaBOe@W}AXcAWyASQ@cAOSMu@Ge@Bm@Xu@LS?a@K_BHOX@Hb@JAFW?VVg@FUCy@k@iAG]WiAUoA?WSa@RyBBmAC}@_@cAXoACcAOg@NsAJcAOoBDwBKEQ]\\QB_DAURk@HiAHc@Eq@No@Bo@RqBBmAPd@f@~@Lp@b@@PWTe@@GHfBFf@`@mA\\gBPIHkAJw@CoAH","noBcj@eBb@@JMDDOu@Bg@Pr@J@PFBz@KBIj@?HECGVBIHJF","noBuk@o@Bn@H","ooBgk@T?BEYG","ooBjIXF@G[I","fe@j_@WKODKGOHBDZDFGPHHI","aj@j]_@HBJ^@CW","inB|IK@@JL@HA@IOC","pe@wEOA?NP@AO","b`BqKKJTF?UI@","n`B_LLAM@","~`BgLH@IA","vaBqLCFHEEA","rbB{L@DDCGA","zo@wNMPDJJQCK","jp@wOW??BTB@G","ro@{OOFFJFS","~f@k\\EFa@BHF^GDEGE","e\\{Zo@c@i@Kc@@?^`@@?LRA?DKDGPWDE`@AOOCSTNFREBPM?DLOD@f@z@@^MDWM[OANEh@o@AMPQ","hg@e^_@BUJt@O","dq@ye@OECBFJJI","ns@af@MG[BVHPE","~m@ci@b@DBIGIa@@@J","j{@qj@SJLDdAK_@M_@F","paAul@UFQ`@eAR@F^@KFDDfAGpCLJIj@CVOgACYCd@CfA@HGm@G`AE]Uu@KSBHFm@EYHWIQFOPIGLSe@?","zp@ol@TIAGGAm@@c@J?DdA?","mvA{l@k@I]LhAC","s{Aan@q@BTF^Ad@GEEc@B","wuAqn@}BHNNhA?^Bf@MIKYC","r|@{n@QDHXt@A?I^?@MoAE","g_Aqp@s@JDFpBFe@Y]A","sy@sq@i@EuA\\DPh@@xAKNMXCs@M","~z@kq@a@GFCm@AYJaAFg@R~@RlA?TIAEOEd@?`@OMG","fx@er@yBOm@FOK}@CaCA{EJ@BrBPk@?nAP`@NpBH[@LBOHPDdARe@Ft@JpDE@Ic@CHMaAFXM`@Cy@QZGFKeAB_@GrB?b@Gj@S","f\\sr@cDQeF?}BNd@FlDDcCBe@EOFTHsCM{@BKFzAP~@Bm@@f@X?VWJ~@Fe@HCPT?YPj@@WFFDv@BYL?Ff@GHDu@NEN`@Bf@QEJVJqA@jB^pAFn@ZnBVPLHX^NGNRb@Z@\\Qf@?PILS`@WL_@ZQGMLGSW]EKWr@JVEEW{@Br@Qb@CUQr@i@XG?Gt@KnC?x@Q{AG`CKAGuCSGGt@EsBWHImBGsADs@IuBLn@IAG","raA_m@i@BPJ\\MEA"];
+  function decodeLine(str) {  // Google polyline encoding, 0.1-degree steps
+    const pts = []; let i = 0, x = 0, y = 0;
+    while (i < str.length) {
+      for (const which of [0, 1]) {
+        let shift = 0, result = 0, b;
+        do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        const d = result & 1 ? ~(result >> 1) : result >> 1;
+        if (which === 0) x += d; else y += d;
+      }
+      pts.push([x / 10, y / 10]);
+    }
+    return pts;
+  }
+  const COAST_LINES = COAST.map(decodeLine);
+  let mapData = null;
+  async function pollMap() {
+    try { mapData = await api("/api/map"); drawMap(); } catch (e) {}
+    setTimeout(pollMap, 60000);
+  }
+  function drawMap() {
+    const m = mapData, mc = $("map"), g = mc.getContext("2d"), W = mc.width, Hh = mc.height;
+    const css = getComputedStyle(document.documentElement);
+    g.clearRect(0, 0, W, Hh);
+    if (!m || !m.home) return;
+    const home = [m.home.lon, m.home.lat];
+    const cities = (m.cities || []).filter(c => isFinite(c.la) && isFinite(c.lo));
+    // longitudes relative to home, so arcs take the short way round; equirectangular with home's parallel true to scale
+    const rel = lon => ((lon - home[0] + 540) % 360) - 180;
+    const kx = Math.max(0.3, Math.cos(home[1] * Math.PI / 180));
+    const pts = [[0, home[1]], ...cities.map(c => [rel(c.lo), c.la])];
+    let minX = Math.min(...pts.map(p => p[0])), maxX = Math.max(...pts.map(p => p[0]));
+    let minY = Math.min(...pts.map(p => p[1])), maxY = Math.max(...pts.map(p => p[1]));
+    const padX = Math.max(8, (maxX - minX) * 0.15), padY = Math.max(6, (maxY - minY) * 0.2);
+    minX -= padX; maxX += padX; minY -= padY; maxY += padY;
+    let spanX = (maxX - minX) * kx, spanY = maxY - minY;
+    if (spanX / spanY < W / Hh) { const want = spanY * W / Hh / kx, mid = (minX + maxX) / 2; minX = mid - want / 2; maxX = mid + want / 2; }
+    else { const want = spanX * Hh / W, mid = (minY + maxY) / 2; minY = mid - want / 2; maxY = mid + want / 2; }
+    const sx = W / ((maxX - minX) * kx), sy = Hh / (maxY - minY);
+    const X = lonRel => (lonRel - minX) * kx * sx, Y = lat => Hh - (lat - minY) * sy;
+    g.lineWidth = 1.5; g.strokeStyle = "#3a3f47"; g.lineJoin = "round";
+    for (const line of COAST_LINES) {
+      g.beginPath(); let prev = null;
+      for (const [lon, lat] of line) {
+        const r = rel(lon);
+        if (prev !== null && Math.abs(r - prev) > 180) { g.stroke(); g.beginPath(); prev = null; }
+        if (prev === null) g.moveTo(X(r), Y(lat)); else g.lineTo(X(r), Y(lat));
+        prev = r;
+      }
+      g.stroke();
+    }
+    const hx = X(0), hy = Y(home[1]);
+    const arc = (c, color, width) => {
+      const x = X(rel(c.lo)), y = Y(c.la), mx = (x + hx) / 2, my = (y + hy) / 2, dx = hx - x, dy = hy - y;
+      const d = Math.hypot(dx, dy) || 1, bend = Math.min(0.25 * d, 90);
+      g.strokeStyle = color; g.lineWidth = width; g.beginPath(); g.moveTo(x, y);
+      g.quadraticCurveTo(mx - dy / d * bend, my + dx / d * bend, hx, hy); g.stroke();
+      g.fillStyle = color; g.beginPath(); g.arc(x, y, width + 1.5, 0, 7); g.fill();
+    };
+    for (const c of cities) if (!c.t) arc(c, "#6c7380", 1.5);
+    for (const c of cities) if (c.t) arc(c, css.getPropertyValue("--accent").trim() || "#ff7a3d", 2.5);
+    g.fillStyle = "#ffffff"; g.beginPath(); g.arc(hx, hy, 5, 0, 7); g.fill();
+    g.strokeStyle = "#ff7a3d"; g.lineWidth = 2; g.beginPath(); g.arc(hx, hy, 8, 0, 7); g.stroke();
+    const today = cities.filter(c => c.t).length;
+    $("map-hint").textContent = cities.length ? `${cities.length} ${cities.length === 1 ? "city" : "cities"} all time, ${today} today. Orange is today; grey is all time.`
+      : "No cities yet. The first plane with a known route puts its city on the map.";
+  }
+
   // ---------------- live sign replica (clock, preview, or current plane)
   const BIG = {}, src = "20:0000000000 2D:0808080808 2E:0000606000 2F:2010080402 30:3E5149453E 31:00427F4000 32:7249494946 33:2141494D33 34:1814127F10 35:2745454539 36:3C4A494931 37:4121110907 38:3649494936 39:464949291E 3A:0000140000 3E:0041221408 3F:0201590906 41:7C1211127C 42:7F49494936 43:3E41414122 44:7F4141413E 45:7F49494941 46:7F09090901 47:3E41415173 48:7F0808087F 49:00417F4100 4A:2040413F01 4B:7F08142241 4C:7F40404040 4D:7F021C027F 4E:7F0408107F 4F:3E4141413E 50:7F09090906 51:3E4151215E 52:7F09192946 53:2649494932 54:03017F0103 55:3F4040403F 56:1F2040201F 57:3F4038403F 58:6314081463 59:0304780403 5A:61594D4543";
   for (const t of src.split(" ")) { const [c, h] = t.split(":"); BIG[String.fromCharCode(parseInt(c, 16))] = [0, 2, 4, 6, 8].map(i => parseInt(h.substr(i, 2), 16)); }
@@ -768,6 +853,7 @@
     requestAnimationFrame(frame);
     poll();
     pollFrame();
+    pollMap();
   })();
 })();
 </script>

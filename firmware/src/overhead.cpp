@@ -640,6 +640,11 @@ void Tracker::end_pass(Track& t, double now) {
     char hhmm[6];
     strftime(hhmm, sizeof(hhmm), "%H:%M", &lt);
     stats.add_pass(lt.tm_yday, lt.tm_hour, p.cs, p.type, p.other_iata, p.city, p.dep, p.peak, p.rare, hhmm);
+    if (p.other_iata[0] && std::find(visited.begin(), visited.end(), p.other_iata) == visited.end()) {
+        if (visited.size() >= 250) visited.erase(visited.begin());
+        visited.push_back(p.other_iata);
+        visited_dirty = true;
+    }
 }
 
 void Tracker::update_inbound(double now) {

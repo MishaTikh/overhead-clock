@@ -58,6 +58,10 @@ void DayStats::add_pass(int day, int hour, const char* cs, const char* type, con
                         const std::string& other_city, bool departing, float peak_db, const std::string& rare_lbl,
                         const char* hhmm) {
     if (day != yday) reset(day);
+    if (!other_iata.empty() && std::find(cities.begin(), cities.end(), other_iata) == cities.end()) {
+        if (cities.size() >= 100) cities.erase(cities.begin());
+        cities.push_back(other_iata);
+    }
     planes++;
     (departing ? departures : arrivals)++;
     if (hour >= 0 && hour < 24) by_hour[hour]++;

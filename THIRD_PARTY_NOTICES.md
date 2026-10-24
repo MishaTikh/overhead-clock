@@ -51,3 +51,9 @@ Each clock talks to these services directly from its owner's home network. Each 
 Ulanzi, AWTRIX and airline names are trademarks of their owners. Overhead is an independent project, not affiliated
 with or endorsed by Ulanzi, any airline, airport or data provider. Airline names and simple colors are used only to
 describe flights; no airline logos are included. Airlines visible in the teaser footage appear incidentally.
+
+## Natural Earth
+
+The coastline outline on the settings page's map is derived from Natural Earth (naturalearthdata.com),
+110m coastline, simplified. Natural Earth is in the public domain; no attribution is required, and it is
+credited here with thanks.

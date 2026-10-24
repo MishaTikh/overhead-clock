@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+- A map on the settings page: every city a plane over the house came from (or was going to), with an arc to your
+  house. Orange is today, grey is all time (up to 250 cities, kept across restarts). Drawn by the phone from a tiny
+  coastline outline built into the page: no internet tiles, nothing sent anywhere.
+
 ## 0.2.1
 - Installer with a window: finds the clock, shows what it runs (version, uptime, last restart) and what the file
   contains (version, size, SHA-256), warns before installing the same or an older version, and confirms the clock

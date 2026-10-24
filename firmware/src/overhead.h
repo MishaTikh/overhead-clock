@@ -175,6 +175,8 @@ public:
     float inbound_s = -1;         // seconds until the next plane becomes audible (<= 30), or -1
     std::string inbound_cs;
     float baro_corr_ft = 0;       // true altitude - pressure altitude today, from the airport's altimeter setting
+    std::vector<std::string> visited;  // every airport code ever heard from (for the map), oldest first, up to 250
+    bool visited_dirty = false;        // new code since it was last saved
 
     void ingest(const std::vector<Fix>& fixes, double fetch_time);
     void tick(double now);

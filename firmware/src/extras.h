@@ -25,6 +25,7 @@ struct DayStats {
     std::string farthest_city; double farthest_nm = 0;
     std::string loudest_type, loudest_cs; float loudest_db = 0;
     std::vector<std::string> rare;   // e.g. "747 DAL164 14:05" (newest first, up to 10)
+    std::vector<std::string> cities; // airport codes heard today (origins, or destinations), first-seen order
     int by_hour[24] = {0};
     void reset(int day);
     // other_iata: the route's far end (origin if landing, destination if departing), "" if unknown.

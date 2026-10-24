@@ -44,8 +44,8 @@ being a clock. No computer, server or account: it just needs Wi-Fi.
 - **Airline colors,** and **rare aircraft** (747, A380, Dreamliner, military, helicopters, vintage) in sparkling gold.
 - **Optional extras,** all off by default: inbound countdown, evening recap ("142 PLANES TODAY  FARTHEST TOKYO"),
   chime for rare planes, indoor/outdoor temperature, date, sunrise/sunset, and "landings over you today" from the wind.
-- **A settings page on your phone** with a live copy of the sign, sample planes when you change the look, and an
-  optional "remember this phone". Plus today's planes (kept across restarts), the hours planes usually pass over
+- **A settings page on your phone** with a live copy of the sign, a map of every city the house has heard from,
+  sample planes when you change the look, and an optional "remember this phone". Plus today's planes (kept across restarts), the hours planes usually pass over
   you, airport weather, and the clock's own health: uptime, why it last restarted, free memory.
 
 ## Get started

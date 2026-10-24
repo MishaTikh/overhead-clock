@@ -23,6 +23,7 @@
 //  - Services that fail are retried with growing delays; a watchdog restarts a hung clock.
 
 #include <Arduino.h>
+#include <algorithm>
 #include <ArduinoJson.h>
 #include <ESPmDNS.h>
 #include <FastLED.h>
@@ -616,6 +617,7 @@ static void save_today() {
     d["lcs"] = st.loudest_cs.c_str();
     d["ldb"] = st.loudest_db;
     for (auto& r : st.rare) d["rare"].add(r.c_str());
+    for (auto& c : st.cities) d["tc"].add(c.c_str());
     for (int h = 0; h < 24; h++) d["hours"].add(st.by_hour[h]);
     for (int i = 0; i < tracker.n_passes; i++) {
         const Pass& p = tracker.passes[i];
@@ -629,6 +631,29 @@ static void save_today() {
     Preferences p;
     p.begin("today", false);
     p.putString("j", out);
+    p.end();
+}
+
+// Every airport the house has heard from, for the map: 3-letter codes run together, in flash.
+static void load_visited() {
+    Preferences p;
+    p.begin("map", true);
+    String all = p.getString("iata", "");
+    p.end();
+    LOCK();
+    tracker.visited.clear();
+    for (unsigned i = 0; i + 3 <= all.length(); i += 3) tracker.visited.push_back(all.substring(i, i + 3).c_str());
+    UNLOCK();
+}
+static void save_visited() {
+    String all;
+    LOCK();
+    for (auto& c : tracker.visited) if (c.size() == 3) all += c.c_str();
+    tracker.visited_dirty = false;
+    UNLOCK();
+    Preferences p;
+    p.begin("map", false);
+    p.putString("iata", all);
     p.end();
 }
 
@@ -653,6 +678,7 @@ static void load_today(int yday) {
     st.loudest_cs = (const char*)(d["lcs"] | "");
     st.loudest_db = d["ldb"] | 0.0f;
     for (JsonVariant r : d["rare"].as<JsonArray>()) st.rare.push_back((const char*)(r | ""));
+    for (JsonVariant c : d["tc"].as<JsonArray>()) st.cities.push_back((const char*)(c | ""));
     int h = 0;
     for (JsonVariant v : d["hours"].as<JsonArray>()) if (h < 24) st.by_hour[h++] = v | 0;
     tracker.n_passes = 0;
@@ -750,7 +776,7 @@ static void network_task(void*) {
         struct tm lt;
         localtime_r(&tt, &lt);
         if (lt.tm_yday != today) {
-            if (today < 0) load_today(lt.tm_yday);  // after a restart: pick the day up where it left off
+            if (today < 0) { load_today(lt.tm_yday); load_visited(); }  // after a restart: pick up where it left off
             if (today >= 0) {  // a day ended: learn its busy hours, start fresh stats
                 LOCK();
                 if (tracker.stats.yday == today) hour_model.end_of_day(tracker.stats.by_hour);
@@ -815,6 +841,7 @@ static void network_task(void*) {
             }
         }
 
+        if (tracker.visited_dirty) save_visited();  // a new city: a rare, small write
         static int saved_planes = -1;
         static double last_save = 0;
         if (tracker.stats.planes != saved_planes && now - last_save > 120) {
@@ -1344,6 +1371,30 @@ static void api_signout() {
     web.send(200, "application/json", "{\"ok\":true}");
 }
 
+// The map: home, and every city heard from, with today's marked.
+static void api_map() {
+    if (!authed()) return;
+    JsonDocument d;
+    LOCK();
+    d["home"]["lat"] = S.home_lat;
+    d["home"]["lon"] = S.home_lon;
+    d["airport"] = S.airport_iata.c_str();
+    JsonArray cities = d["cities"].to<JsonArray>();
+    for (auto& code : tracker.visited) {
+        AirportInfo ap;
+        if (!airport_by_iata(code, ap)) continue;
+        JsonObject o = cities.add<JsonObject>();
+        o["i"] = code.c_str();
+        o["c"] = ap.city.c_str();
+        o["la"] = serialized(String(ap.lat, 2));
+        o["lo"] = serialized(String(ap.lon, 2));
+        bool today = std::find(tracker.stats.cities.begin(), tracker.stats.cities.end(), code) != tracker.stats.cities.end();
+        if (today) o["t"] = true;
+    }
+    UNLOCK();
+    send_json(d);
+}
+
 // What the sign shows right now: 32 columns of on bits, dim bits, dim level and color, as hex.
 static void api_frame() {
     if (!authed()) return;
@@ -1860,6 +1911,7 @@ void setup() {
     web.on("/api/update", HTTP_POST, api_update_done, api_update_stream);
     web.on("/api/update/ready", HTTP_GET, api_update_ready);
     web.on("/api/frame", HTTP_GET, api_frame);
+    web.on("/api/map", HTTP_GET, api_map);
     web.on("/api/remember", HTTP_POST, api_remember, api_body_stream);
     web.on("/api/signout", HTTP_POST, api_signout, api_body_stream);
     web.onNotFound([]() { security_headers(); web.send(404, "text/plain", "Not found"); });
