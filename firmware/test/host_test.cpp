@@ -172,9 +172,12 @@ int main(int argc, char** argv) {
             uint8_t c;
             CHECK(!exit_text_at(e, e.text_end, cols, c));   // nothing after the finished copy
         }
-        // short name: one copy, then the time
-        ExitPlan s = plan_exit(5, 10, 36);
-        CHECK(s.text_end == 10 && s.scene_at == 37);
+        // short name: one copy, then the time comes in from the right edge
+        ExitPlan s = plan_exit(2, 10, 36);
+        CHECK(s.text_end == 10 && s.scene_at == 34);
+        // the next copy just entering at the right edge (offset 5: column 36 is on the sign) is finished too
+        ExitPlan s2 = plan_exit(5, 10, 36);
+        CHECK(s2.text_end == 46 && s2.scene_at == 49);
         // jet bitmap: 7 rows tall at most, nose at the left, contrails behind
         int top = 0; for (int x = 0; x < JET_W; x++) top |= JET_ON[x] | JET_DIM[x];
         CHECK(top < 0x80 && JET_ON[0] == 0x08 && JET_DIM[JET_W - 2] == 0x14);
