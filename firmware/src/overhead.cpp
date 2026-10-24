@@ -41,14 +41,14 @@ void move(double lat, double lon, double brg_deg, double dist_ft, double& olat, 
 // pick the right class. Prefixes of ICAO type codes.
 static char category_from_type(const char* type) {
     if (!type || !type[0]) return 0;
-    static const char* heavy[] = {"A33", "A34", "A35", "A38", "B74", "B76", "B77", "B78", "MD1", "DC1", "A3ST", "C17", "K35", "IL"};
+    static const char* heavy[] = {"A33", "A34", "A35", "A38", "B74", "B76", "B77", "B78", "MD1", "DC1", "A3ST", "K35", "IL"};  // no "C17": it would catch Cessna 172s
     static const char* b757[] = {"B75"};
     static const char* medium[] = {"A19", "A20", "A21", "A31", "A32", "B72", "B73", "B38", "B39", "E17", "E19", "E29", "E75", "E90",
                                    "E95", "CRJ", "BCS", "MD8", "MD9", "DH8", "AT4", "AT7", "DC9", "SB20", "RJ"};
     static const char* small[] = {"C25", "C50", "C55", "C56", "C68", "C70", "C75", "CL3", "CL6", "GLF", "GL", "GA", "E35", "E50",
                                   "E55", "LJ", "H25", "F2T", "F90", "FA", "PC12", "PC24", "B350", "BE20", "BE30", "BE40", "BE9", "SW", "SF34", "C130", "C30"};
     static const char* light[] = {"C1", "C2", "P28", "PA", "SR2", "BE3", "BE5", "BE6", "BE7", "BE8", "M20", "DA", "RV", "G", "AA5", "AC", "CH7", "PIPA", "TB"};
-    static const char* heli[] = {"R22", "R44", "R66", "EC", "AS3", "AS5", "B06", "B407", "B429", "B412", "H60", "H53", "UH1", "S76", "S92", "A109", "A139", "AW", "BK17", "H47", "EH10", "MD50", "MD52", "MD60", "MD90"};
+    static const char* heli[] = {"R22", "R44", "R66", "EC", "AS3", "AS5", "B06", "B407", "B429", "B412", "H60", "H53", "UH1", "S76", "S92", "A109", "A139", "AW", "BK17", "H47", "EH10", "MD50", "MD52", "MD60"};
     struct Group { const char** list; int n; char cat; };
     Group groups[] = {
         {heli, (int)(sizeof(heli) / sizeof(*heli)), '7'}, {heavy, (int)(sizeof(heavy) / sizeof(*heavy)), '5'}, {b757, 1, '4'},
