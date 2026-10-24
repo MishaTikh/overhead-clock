@@ -1,6 +1,8 @@
 # Changelog
 
 ## 0.2.2
+- Fixed: the installer window said it couldn't find the clock right after finding it, and showed the PC's own
+  address. (PowerShell closures; the callbacks no longer use them.)
 - A map on the settings page: every city a plane over the house came from (or was going to), with an arc to your
   house. Orange is today, grey is all time (up to 250 cities, kept across restarts). Drawn by the phone from a tiny
   coastline outline built into the page: no internet tiles, nothing sent anywhere.

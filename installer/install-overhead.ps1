@@ -74,6 +74,7 @@ function Probe-Clock([string]$target) {
 
 function Resolve-ClockIp([string]$name) {
     # Overhead only answers requests addressed to its own name or IP; the IP is the safe choice
+    if (-not $name) { return "" }
     if ($name -match '^\d+\.\d+\.\d+\.\d+$') { return $name }
     try {  # Windows' own resolver, which also answers .local names (mDNS)
         $ip = [System.Net.Dns]::GetHostAddresses($name) | Where-Object { $_.AddressFamily -eq "InterNetwork" } | Select-Object -First 1
@@ -266,8 +267,10 @@ function Show-Clock {
 }
 
 # Background steps: one curl process at a time with a continuation, driven by a timer so the window stays alive.
-$script:pending = $null   # @{ Proc; Then = scriptblock(code, out) }
-$script:later = $null     # @{ At = DateTime; Then = scriptblock }
+# Continuations are plain script blocks (not closures): they run in this script's scope, so $script: state works
+# and anything they need is handed over in $ctx.
+$script:pending = $null   # @{ Proc; Then = scriptblock(code, out, ctx); Ctx }
+$script:later = $null     # @{ At = DateTime; Then = scriptblock(ctx); Ctx }
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 100
 $timer.add_Tick({
@@ -276,20 +279,20 @@ $timer.add_Tick({
         $script:pending = $null
         $out = $p.Proc.StandardOutput.ReadToEnd()
         $code = $p.Proc.ExitCode
-        & $p.Then $code $out
+        & $p.Then $code $out $p.Ctx
     }
     $l = $script:later
     if ($l -and (Get-Date) -ge $l.At) {
         $script:later = $null
-        & $l.Then
+        & $l.Then $l.Ctx
     }
 })
 $timer.Start()
-function Then([string[]]$arguments, [string]$stdin, [scriptblock]$then) {
-    $script:pending = @{ Proc = (Start-Curl $arguments $stdin); Then = $then }
+function Then([string[]]$arguments, [string]$stdin, [scriptblock]$then, $ctx = $null) {
+    $script:pending = @{ Proc = (Start-Curl $arguments $stdin); Then = $then; Ctx = $ctx }
 }
-function Later([int]$ms, [scriptblock]$then) {  # a pause that keeps the window responsive
-    $script:later = @{ At = (Get-Date).AddMilliseconds($ms); Then = $then }
+function Later([int]$ms, [scriptblock]$then, $ctx = $null) {  # a pause that keeps the window responsive
+    $script:later = @{ At = (Get-Date).AddMilliseconds($ms); Then = $then; Ctx = $ctx }
 }
 
 # ---- find the clock: probe the candidates one after another
@@ -303,22 +306,23 @@ function Find-Clock([string[]]$targets, [int]$i = 0) {
     $clockStatus.Text = "Looking for the clock at $t..."
     $clockStatus.ForeColor = [System.Drawing.SystemColors]::ControlText
     Then @("-s", "-m", "4", "http://$t/update/identity") $null {
-        param($code, $out)
+        param($code, $out, $c)
         if ($code -eq 0 -and $out -match '"hardware"') {
-            $script:found = @{ Kind = "stock"; Host = $t; Ip = (Resolve-ClockIp $t); Identity = $out; Version = $null }
-            Set-Busy $false; Show-Clock; Log "Found Ulanzi's firmware at $t."
+            $script:found = @{ Kind = "stock"; Host = $c.t; Ip = (Resolve-ClockIp $c.t); Identity = $out; Version = $null }
+            Set-Busy $false; Show-Clock; Log "Found Ulanzi's firmware at $($c.t)."
             return
         }
-        Then @("-s", "-m", "4", "-D", "-", "-o", "NUL", "http://$t/") $null {
-            param($code2, $out2)
+        Then @("-s", "-m", "4", "-D", "-", "-o", "NUL", "http://$($c.t)/") $null {
+            param($code2, $out2, $c2)
             if ($code2 -eq 0 -and $out2 -match 'realm="Overhead Clock"') {
-                $script:found = @{ Kind = "overhead"; Host = $t; Ip = (Resolve-ClockIp $t); Identity = ""; Version = $null }
-                Set-Busy $false; Show-Clock; Log "Found Overhead at $t ($($script:found.Ip)). Type the admin password to see its version and install."
+                $script:found = @{ Kind = "overhead"; Host = $c2.t; Ip = (Resolve-ClockIp $c2.t); Identity = ""; Version = $null }
+                Set-Busy $false; Show-Clock
+                Log "Found Overhead at $($c2.t) ($($script:found.Ip)). Type the admin password to see its version and install."
                 return
             }
-            Find-Clock $targets ($i + 1)
-        }.GetNewClosure()
-    }.GetNewClosure()
+            Find-Clock $c2.targets ($c2.i + 1)
+        } $c
+    } @{ t = $t; targets = $targets; i = $i }
 }
 
 $findBtn.add_Click({
@@ -351,11 +355,12 @@ function Wait-ForClock([string]$config, [int]$tries = 0) {
     if ($tries -ge 25) { Finish-Install "The clock hasn't answered yet. Give it a minute; if it doesn't come back, unplug it and plug it in again." $false; return }
     $progress.Style = "Blocks"; $progress.Value = [math]::Min(99, 60 + $tries * 2)
     $tmp = [System.IO.Path]::GetTempFileName()
+    $ctx = @{ config = $config; tries = $tries; tmp = $tmp }
     if ($config) {
         Then @("-s", "-m", "3", "-K", "-", "--digest", "-o", $tmp, "-w", "%{http_code}", "http://$ip/api/status") $config {
-            param($code, $out)
-            $body = ""; try { $body = Get-Content $tmp -Raw -ErrorAction SilentlyContinue } catch { }
-            Remove-Item $tmp -ErrorAction SilentlyContinue
+            param($code, $out, $c)
+            $body = ""; try { $body = Get-Content $c.tmp -Raw -ErrorAction SilentlyContinue } catch { }
+            Remove-Item $c.tmp -ErrorAction SilentlyContinue
             if ($out -eq "200" -and $body) {
                 try { $j = $body | ConvertFrom-Json } catch { $j = $null }
                 $v = if ($j) { $j.version } else { "?" }
@@ -368,19 +373,19 @@ function Wait-ForClock([string]$config, [int]$tries = 0) {
                 }
                 return
             }
-            Later 2500 { Wait-ForClock $config ($tries + 1) }.GetNewClosure()
-        }.GetNewClosure()
+            Later 2500 { param($c3) Wait-ForClock $c3.config ($c3.tries + 1) } $c
+        } $ctx
     } else {
         Then @("-s", "-m", "3", "-D", "-", "-o", "NUL", "http://$ip/") $null {
-            param($code, $out)
-            Remove-Item $tmp -ErrorAction SilentlyContinue
+            param($code, $out, $c)
+            Remove-Item $c.tmp -ErrorAction SilentlyContinue
             if ($code -eq 0 -and $out -match 'realm="Overhead Clock"') {
                 $script:found.Kind = "overhead"; Show-Clock
-                Finish-Install "Done. Overhead is running at $ip.`n`nNext: hold the clock's middle button for 3 seconds to see its settings address and password, open that address on your phone, sign in as admin, and enter your street address." $true
+                Finish-Install "Done. Overhead is running at $($script:found.Ip).`n`nNext: hold the clock's middle button for 3 seconds to see its settings address and password, open that address on your phone, sign in as admin, and enter your street address." $true
                 return
             }
-            Later 2500 { Wait-ForClock $null ($tries + 1) }.GetNewClosure()
-        }.GetNewClosure()
+            Later 2500 { param($c3) Wait-ForClock $null ($c3.tries + 1) } $c
+        } $ctx
     }
 }
 
@@ -392,19 +397,19 @@ function Upload-Overhead([string]$config) {
     # the image's SHA-256 rides in the URL, which the Digest sign-in signs; the clock refuses an image that doesn't match it
     Then @("-s", "-m", "300", "-K", "-", "--digest", "-o", $tmp, "-w", "%{http_code}", "-H", "X-Overhead: 1",
            "-H", "Content-Type: application/octet-stream", "--data-binary", "@$($fw.Path)", "http://$ip/api/update?sha256=$($fw.Sha256)") $config {
-        param($code, $out)
-        $body = ""; try { $body = Get-Content $tmp -Raw -ErrorAction SilentlyContinue } catch { }
-        Remove-Item $tmp -ErrorAction SilentlyContinue
+        param($code, $out, $c)
+        $body = ""; try { $body = Get-Content $c.tmp -Raw -ErrorAction SilentlyContinue } catch { }
+        Remove-Item $c.tmp -ErrorAction SilentlyContinue
         if ($out -eq "200") {
             Log "Upload accepted. The clock is verifying the image and restarting..."
-            Later 4000 { Wait-ForClock $config }.GetNewClosure()
+            Later 4000 { param($c3) Wait-ForClock $c3.config } $c
         } elseif ($out -eq "401") { Finish-Install "The password wasn't accepted. Hold the middle button to see it again (12 characters, no spaces)." $false }
         elseif ($out -eq "429") { Finish-Install "Too many wrong passwords from this computer. Wait a minute and try again." $false }
         else {
             $msg = ""; try { $msg = ($body | ConvertFrom-Json).error } catch { if ($body -and $body.Length -lt 300) { $msg = $body.Trim() } }
             Finish-Install "The upload didn't work (HTTP $out). $msg`nThe clock keeps its current firmware." $false
         }
-    }.GetNewClosure()
+    } @{ config = $config; tmp = $tmp }
 }
 
 function Upload-Stock {
@@ -415,15 +420,15 @@ function Upload-Stock {
     $tmp = [System.IO.Path]::GetTempFileName()
     Then @("-s", "-m", "300", "-o", $tmp, "-w", "%{http_code}", "-F", "MD5=$md5",
            "-F", "firmware=@$($fw.Path);filename=firmware;type=application/octet-stream", "http://$ip/update") $null {
-        param($code, $out)
-        Remove-Item $tmp -ErrorAction SilentlyContinue
+        param($code, $out, $c)
+        Remove-Item $c.tmp -ErrorAction SilentlyContinue
         if ($out -eq "200") {
             Log "Upload accepted. The clock is restarting into Overhead..."
-            Later 4000 { Wait-ForClock $null }
+            Later 4000 { param($c3) Wait-ForClock $null } $null
         } else {
-            Finish-Install "The upload didn't work (HTTP $out). The clock keeps its current firmware; try again, or open http://$ip/update in a browser." $false
+            Finish-Install "The upload didn't work (HTTP $out). The clock keeps its current firmware; try again, or open http://$($script:found.Ip)/update in a browser." $false
         }
-    }.GetNewClosure()
+    } @{ tmp = $tmp }
 }
 
 $installBtn.add_Click({
@@ -448,9 +453,9 @@ $installBtn.add_Click({
     Log "Signing in to the clock at $($c.Ip)..."
     $tmp = [System.IO.Path]::GetTempFileName()
     Then @("-s", "-m", "8", "-K", "-", "--digest", "-o", $tmp, "-w", "%{http_code}", "http://$($c.Ip)/api/status") $config {
-        param($code, $out)
-        $body = ""; try { $body = Get-Content $tmp -Raw -ErrorAction SilentlyContinue } catch { }
-        Remove-Item $tmp -ErrorAction SilentlyContinue
+        param($code, $out, $cx)
+        $body = ""; try { $body = Get-Content $cx.tmp -Raw -ErrorAction SilentlyContinue } catch { }
+        Remove-Item $cx.tmp -ErrorAction SilentlyContinue
         if ($out -eq "401") { Finish-Install "The password wasn't accepted. Hold the middle button to see it again (12 characters, no spaces)." $false; return }
         if ($out -eq "429") { Finish-Install "Too many wrong passwords from this computer. Wait a minute and try again." $false; return }
         if ($out -ne "200") { Finish-Install "The clock answered HTTP $out. Check the address and try again." $false; return }
@@ -469,8 +474,8 @@ $installBtn.add_Click({
             $a = [System.Windows.Forms.MessageBox]::Show($form, $question, "Overhead installer", "YesNo", "Question")
             if ($a -ne "Yes") { Finish-Install "Nothing changed." $false; return }
         }
-        Upload-Overhead $config
-    }.GetNewClosure()
+        Upload-Overhead $cx.config
+    } @{ config = $config; tmp = $tmp }
 })
 
 # ---------------------------------------------------------------- start
@@ -480,15 +485,15 @@ if (-not (Test-Path $curl)) {
 }
 if (-not $Firmware) { $Firmware = Find-DefaultFirmware }
 Show-File $Firmware
+$targets = if ($Clock) { @($Clock) } else { @("overhead.local", "clock.local", "192.168.4.1") }
 if ($Screenshot) {
+    # test mode: run the real detection, wait for it, print what it found, render the window and exit
     $form.Show()
-    [System.Windows.Forms.Application]::DoEvents()
-    $script:found = @{ Kind = "overhead"; Host = "overhead.local"; Ip = "192.168.1.42"; Identity = ""; Version = "0.1.8" }
-    Set-Busy $false; Show-Clock
-    Log "Found Overhead at overhead.local (192.168.1.42). Type the admin password to see its version and install."
-    Log "Clock: Overhead 0.1.8, running for 6.2 days, last restart: power on, free memory 139 KB"
-    Log "Update: Overhead 0.1.8 -> 0.2.0"
-    "state: kind=$($script:found.Kind) status=$($clockStatus.Text)"
+    Set-Busy $true
+    Find-Clock $targets
+    $deadline = (Get-Date).AddSeconds(20)
+    while ($script:busy -and (Get-Date) -lt $deadline) { [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 50 }
+    "state: kind=$($script:found.Kind) host=$($script:found.Host) ip=$($script:found.Ip) status=$($clockStatus.Text)"
     $bmp = New-Object System.Drawing.Bitmap $form.Width, $form.Height
     $form.DrawToBitmap($bmp, (New-Object System.Drawing.Rectangle 0, 0, $form.Width, $form.Height))
     $bmp.Save($Screenshot)
@@ -496,7 +501,6 @@ if ($Screenshot) {
 }
 $form.add_Shown({
     Set-Busy $true
-    $targets = if ($Clock) { @($Clock) } else { @("overhead.local", "clock.local", "192.168.4.1") }
     Find-Clock $targets
 })
 [void]$form.ShowDialog()
