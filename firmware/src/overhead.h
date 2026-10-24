@@ -47,6 +47,11 @@ struct Settings {
     int quiet_start = QUIET_START_H, quiet_end = QUIET_END_H;
     int color_by_airline = COLOR_BY_AIRLINE;
     int mode = MODE, clock_24h = CLOCK_24H;  // mode: 1 clock + planes, 0 planes only
+    // the look
+    bool jet_banner = true;                   // a little jet tows the city onto the sign
+    bool breathe = true;                      // the city brightens as the plane gets louder, fades as it leaves
+    bool milestones = true;                   // FIRST PLANE TODAY, 100 PLANES TODAY, NEW RECORD ...
+    bool warm_night = true;                   // the clock turns a warmer amber between sunset and sunrise
 };
 extern Settings S;
 enum { ROT_INDOOR = 1, ROT_OUTDOOR = 2, ROT_DATE = 4, ROT_SUN = 8, ROT_FLOW = 16, ROT_TODAY = 32 };

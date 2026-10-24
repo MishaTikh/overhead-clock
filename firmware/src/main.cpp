@@ -99,13 +99,37 @@ static double now_s() {
 static bool time_valid() { return time(nullptr) > 1700000000; }
 static CRGB rgb(uint32_t c) { return CRGB((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF); }
 
-static void show_override(const std::string& text, double secs, uint32_t color = 0xFF7800, float speed = 0) {
+// glide: slide in and out like a plane's city (for the clock's own screens); otherwise switch instantly,
+// which keeps button feedback snappy.
+static bool override_glide = false;
+static void show_override(const std::string& text, double secs, uint32_t color = 0xFF7800, float speed = 0,
+                          bool glide = false) {
     LOCK();
+    override_glide = glide;
     override_speed = speed;
     override_text = text;
     override_rgb = color;
     override_until = now_s() + secs;
     UNLOCK();
+}
+
+// What the sign shows right now, column by column, for the settings page's live copy.
+struct LiveCol { uint8_t on, dim, dim_level; uint32_t rgb; };
+static LiveCol live_frame[MATRIX_W];
+
+// Between sunset and sunrise at home (worked out once a day).
+static bool is_night(time_t t) {
+    static int rise = -1, set = -1, day = -1;
+    if (!location_set()) return false;
+    struct tm lt;
+    localtime_r(&t, &lt);
+    if (lt.tm_yday != day) {
+        day = lt.tm_yday;
+        if (!sun_times(t, S.home_lat, S.home_lon, rise, set)) rise = set = -1;
+    }
+    if (rise < 0) return false;
+    int m = lt.tm_hour * 60 + lt.tm_min;
+    return m >= set || m < rise;
 }
 
 // Credentials are shown slowly and in still blocks: easy to read off the sign.
@@ -1684,6 +1708,8 @@ void setup() {
     xTaskCreatePinnedToCore(display_task, "display", 12288, nullptr, 3, nullptr, 1);
 }
 
+static void check_milestones();
+
 static void housekeeping(double now) {
     static bool was_connected = false, mdns_up = false;
     static uint32_t last_sensor = 0, last_rtc_write = 0, last_inbound = 0;
@@ -1707,8 +1733,54 @@ static void housekeeping(double now) {
         LOCK();
         tracker.update_inbound(now);
         UNLOCK();
+        check_milestones();
     }
     chime_tick();
+}
+
+// Little celebrations, shown in gold once the plane that earned them has passed: the first plane of the
+// day, every hundredth, and a new farthest-ever city (the record is kept across restarts).
+static std::string pending_milestone;
+static void check_milestones() {
+    static int seen_planes = -1, seen_yday = -2;
+    static float record_nm = -1;
+    if (record_nm < 0) {
+        Preferences p;
+        p.begin("records", true);
+        record_nm = p.getFloat("far_nm", 0);
+        p.end();
+    }
+    LOCK();
+    int planes = tracker.stats.planes, yday = tracker.stats.yday;
+    std::string city = tracker.stats.farthest_city;
+    double far_nm = tracker.stats.farthest_nm;
+    UNLOCK();
+    if (yday != seen_yday) {  // a new day, or just started (today's count restored): nothing to celebrate yet
+        seen_yday = yday;
+        seen_planes = planes;
+        return;
+    }
+    if (planes <= seen_planes) return;
+    int prev = seen_planes;
+    seen_planes = planes;
+    if (!S.milestones) return;
+    std::string m;
+    if (prev == 0 && planes == 1) m = "FIRST PLANE TODAY";
+    else if (planes / 100 > prev / 100) m = std::to_string(planes / 100 * 100) + " PLANES TODAY";
+    if (!city.empty() && far_nm > record_nm * 1.05) {
+        bool first_record = record_nm <= 0;  // the very first city just sets the bar quietly
+        record_nm = far_nm;
+        Preferences p;
+        p.begin("records", false);
+        p.putFloat("far_nm", record_nm);
+        p.end();
+        if (!first_record) {
+            for (auto& c : city) c = toupper((unsigned char)c);
+            int dist = (int)lround(S.units_f ? far_nm * 1.15078 : far_nm * 1.852);
+            m = "NEW RECORD  " + city + "  " + std::to_string(dist) + (S.units_f ? " MI" : " KM");
+        }
+    }
+    if (!m.empty()) pending_milestone = m;
 }
 
 // Extra screens between clock minutes, and the evening recap.
@@ -1718,12 +1790,18 @@ static bool rotation_override(double now) {
     time_t tt = (time_t)now;
     struct tm lt;
     localtime_r(&tt, &lt);
+    if (!pending_milestone.empty()) {
+        std::string m = pending_milestone;
+        pending_milestone.clear();
+        show_override(m, 3 + m.size() * 6.0 / S.scroll_speed, 0xFFC83C, 0, true);
+        return true;
+    }
     if (S.recap && lt.tm_hour == S.recap_hour && lt.tm_min == 0 && recap_day != lt.tm_yday && time_valid()) {
         recap_day = lt.tm_yday;
         LOCK();
         std::string r = tracker.stats.recap();
         UNLOCK();
-        show_override(r, 3 + r.size() * 6.0 / S.scroll_speed, S.clock_rgb);
+        show_override(r, 3 + r.size() * 6.0 / S.scroll_speed, S.clock_rgb, 0, true);
         return true;
     }
     if (!S.rotation || S.mode != 1 || now < next_rot) return false;
@@ -1735,7 +1813,7 @@ static bool rotation_override(double now) {
         std::string t = rotation_text(bit, tt);
         UNLOCK();
         if (t.empty()) continue;
-        show_override(t, 2.5 + t.size() * 6.0 / S.scroll_speed, S.clock_rgb);
+        show_override(t, 2.5 + t.size() * 6.0 / S.scroll_speed, S.clock_rgb, 0, true);
         return true;
     }
     return false;
@@ -1763,7 +1841,8 @@ static void render_frame() {
     std::string text;
     CRGB color;
     float loud = 0;
-    bool active = false, rare = false, notice = false;
+    bool active = false, rare = false, notice = false, via_override = false;
+    uint32_t plane_hex = 0;
     float inbound = -1;
     LOCK();
     bool overriding = now < override_until, plane_active = tracker.msg.active;
@@ -1777,7 +1856,8 @@ static void render_frame() {
         color = rgb(override_rgb);
         loud = 1;
         active = true;
-        notice = true;
+        notice = !override_glide;
+        via_override = true;
     }
     UNLOCK();
     if (active) {
@@ -1790,6 +1870,7 @@ static void render_frame() {
             loud = fminf(1.0f, fmaxf(0.0f, (tracker.msg.level - S.on_db) / 20.0f));
             active = true;
             rare = tracker.msg.rare;
+            plane_hex = tracker.msg.hex;
             if (rare && tracker.msg.hex != last_rare_hex) { last_rare_hex = tracker.msg.hex; chime(); }
         } else if (S.inbound_countdown && tracker.inbound_s > 0) {
             inbound = tracker.inbound_s;
@@ -1798,16 +1879,18 @@ static void render_frame() {
     }
 
     float base = brightness_base();
-    // What to show: the picture's columns, its color, its brightness and its kind (for transitions).
-    enum Kind { DARK, CLOCK, INBOUND, PLANE, NOTICE };
+    // What to show: the picture's columns, its color, its brightness and its kind (for the hand-offs).
+    // PLANE is a plane's city; GLIDE is the clock's own screens (temperature, recap, milestones), which
+    // slide like a city but without the jet; NOTICE is button feedback, which switches instantly.
+    enum Kind { DARK, CLOCK, INBOUND, PLANE, GLIDE, NOTICE };
     Kind kind;
-    uint8_t cols[MATRIX_W] = {0};
+    uint8_t cols[MATRIX_W] = {0}, colon[MATRIX_W] = {0};
     CRGB col_color = CRGB::Black;
     float bright;
     if (active) {
-        kind = notice ? NOTICE : PLANE;
+        kind = notice ? NOTICE : via_override ? GLIDE : PLANE;
         col_color = color;
-        bright = base * (S.brightness ? 1.0f : 0.55f + 0.45f * loud);
+        bright = base;
     } else if (inbound > 0) {  // a plane is about to be audible: plane icon flying toward the countdown
         kind = INBOUND;
         inbound_frame(inbound, cols);
@@ -1818,74 +1901,138 @@ static void render_frame() {
         time_t tt = (time_t)now;
         struct tm lt;
         localtime_r(&tt, &lt);
-        clock_frame(lt.tm_hour, lt.tm_min, (tt % 2) == 0, S.clock_24h, cols);
+        // the colon breathes slowly instead of blinking: it's drawn apart from the digits, dimmed by a sine
+        uint8_t with_colon[MATRIX_W];
+        clock_frame(lt.tm_hour, lt.tm_min, false, S.clock_24h, cols);
+        clock_frame(lt.tm_hour, lt.tm_min, true, S.clock_24h, with_colon);
+        for (int x = 0; x < MATRIX_W; x++) {
+            colon[x] = with_colon[x] & ~cols[x];
+            cols[x] &= with_colon[x];
+        }
         col_color = rgb(S.clock_rgb);
+        if (S.warm_night && is_night(tt)) col_color = blend(col_color, CRGB(255, 122, 48), 150);
         bright = base * 0.6f;
     } else {
         kind = DARK;
         bright = base;
     }
 
-    // Push transition: when the picture changes between the clock (or dark) and a plane, the old one slides
-    // out to the left as the new one slides in. Button notices switch instantly.
-    static Kind shown = DARK;
-    static uint8_t last_cols[MATRIX_W] = {0}, from_cols[MATRIX_W] = {0};
-    static CRGB last_color = CRGB::Black, from_color = CRGB::Black;
-    static float last_bright = 0, from_bright = 0;
-    static double trans_start = -1;
-    const int gap = 3;
-    const float trans_speed = S.scroll_speed > 0 ? S.scroll_speed : SCROLL_PX_PER_S;  // one continuous motion
-    const double trans_secs = (MATRIX_W + gap) / trans_speed;
-    if (kind != shown) {
-        if (kind != NOTICE && shown != NOTICE) {
-            memcpy(from_cols, last_cols, sizeof(from_cols));
-            from_color = last_color;
-            from_bright = last_bright;
-            trans_start = now;
-        } else {
-            trans_start = -1;
-        }
-        shown = kind;
-        if (kind == PLANE || kind == NOTICE) marquee.set_text("", now);  // the new text starts from its first letter
+    // Breathing: the city brightens as the plane gets louder and fades as it leaves (smoothed, so it glows
+    // rather than flickers). Off, the city is always at full color.
+    static float breath = 1;
+    CRGB text_color = col_color;
+    if (kind == PLANE) {
+        float target = S.breathe ? 0.35f + 0.65f * loud : 1.0f;
+        breath += (target - breath) * 0.06f;
+        text_color.nscale8_video((uint8_t)(255 * breath));
     }
-    bool sliding = trans_start >= 0 && now - trans_start < trans_secs;
+    const float colon_level = 0.3f + 0.7f * (0.5f + 0.5f * sinf((float)now * 3.14159f));  // a 2-second breath
+
+    // ---- hand-offs. A plane's city arrives towed by a little jet, pushing the old picture out to the left,
+    // and keeps scrolling without a pause. When the plane has passed, whatever part of the name is on the
+    // sign finishes scrolling (a name is never cut off mid-word) and the next picture follows it in.
+    struct Col { uint8_t on, dim, dim_level; CRGB c; };
+    static Col drawn[MATRIX_W], from[MATRIX_W];
+    static Kind shown = DARK;
+    static float last_bright = 0, from_bright = 0;
+    static double enter_start = -1, exit_start = -1;
+    static ExitPlan exit_plan;
+    static std::vector<uint8_t> exit_cols;
+    static CRGB exit_color, last_text_color;
+    const float speed_px = S.scroll_speed > 0 ? S.scroll_speed : SCROLL_PX_PER_S;  // one continuous motion
+    const bool towed = kind == PLANE && S.jet_banner;
+    const int lead = MATRIX_W + 3 + (towed ? JET_W + 1 : 0);  // old picture, gap, [jet, gap], new picture
+    const double enter_secs = lead / speed_px;
+    static uint32_t shown_hex = 0;
+    bool next_plane = kind == PLANE && shown == PLANE && plane_hex != shown_hex;  // one plane straight after another
+    if (kind == PLANE) shown_hex = plane_hex;
+    if (kind != shown || next_plane) {
+        Kind was = shown;
+        shown = kind;
+        enter_start = exit_start = -1;
+        if (kind == NOTICE || was == NOTICE) {
+            // button feedback: instant both ways
+        } else if (was == PLANE || was == GLIDE) {
+            exit_plan = plan_exit(marquee.offset(now), (int)marquee.columns().size(), marquee.cycle());
+            exit_cols = marquee.columns();
+            exit_color = last_text_color;
+            from_bright = last_bright;
+            exit_start = now;
+        } else {
+            memcpy(from, drawn, sizeof(from));
+            from_bright = last_bright;
+            enter_start = now;
+        }
+        if (kind == PLANE || kind == GLIDE || kind == NOTICE) marquee.set_text("", now);  // starts from its first letter
+    }
+    bool entering = enter_start >= 0 && now - enter_start < enter_secs;
+    int exit_pos = exit_start >= 0 ? exit_plan.start + (int)((now - exit_start) * speed_px) : 0;
+    bool exiting = exit_start >= 0 && exit_pos < exit_plan.scene_at;
     if (active) {
         marquee.set_text(text, now, speed);
-        // slid in at the scroll speed: keeps scrolling the moment it's in place, no pause on the first letters
-        if (sliding) marquee.restart(trans_start + trans_secs - SCROLL_HOLD_S);
+        // slid in at the scroll speed: keeps scrolling the moment it's in place, no pause on the first letter
+        if (entering) marquee.restart(enter_start + enter_secs - SCROLL_HOLD_S);
+        // text after text: the new one waits just off the sign until the old one has scrolled away
+        else if (exiting) marquee.restart(exit_start + (exit_plan.scene_at - exit_plan.start) / speed_px - SCROLL_HOLD_S);
         marquee.frame(now, cols);
+        last_text_color = kind == PLANE ? text_color : col_color;
     } else {
         marquee.set_text("", now);
     }
-    memcpy(last_cols, cols, sizeof(last_cols));
-    last_color = col_color;
-    last_bright = bright;
-    if (sliding) bright = fmaxf(bright, from_bright);  // no sudden dimming while one slides out
+    const CRGB here_color = kind == PLANE ? text_color : col_color;
+    const uint8_t here_level = (uint8_t)(255 * colon_level);
 
-    FastLED.clear();
-    if (sliding) {
-        int off = (int)((now - trans_start) * trans_speed);
+    Col out[MATRIX_W];
+    for (int x = 0; x < MATRIX_W; x++) out[x] = {cols[x], colon[x], here_level, here_color};
+    if (entering) {
+        int off = (int)((now - enter_start) * speed_px);
         for (int x = 0; x < MATRIX_W; x++) {
-            int k = x + off;  // position on the strip: old picture, gap, new picture
-            uint8_t c = 0;
-            CRGB cc;
-            if (k < MATRIX_W) { c = from_cols[k]; cc = from_color; }
-            else if (k >= MATRIX_W + gap && k < 2 * MATRIX_W + gap) { c = cols[k - MATRIX_W - gap]; cc = col_color; }
-            for (int y = 0; y < MATRIX_H; y++)
-                if (c & (1 << y)) leds[xy(x, y)] = cc;
+            int k = x + off;  // position on the strip
+            out[x] = {0, 0, 0, CRGB::Black};
+            if (k < MATRIX_W) out[x] = from[k];
+            else if (towed && k >= MATRIX_W + 3 && k < MATRIX_W + 3 + JET_W)
+                out[x] = {JET_ON[k - MATRIX_W - 3], JET_DIM[k - MATRIX_W - 3], 80, CRGB(235, 232, 220)};
+            else if (k >= lead && k < lead + MATRIX_W)
+                out[x] = {cols[k - lead], colon[k - lead], here_level, here_color};
         }
-    } else {
-        for (int x = 0; x < MATRIX_W; x++)
-            for (int y = 0; y < MATRIX_H; y++)
-                if (cols[x] & (1 << y)) leds[xy(x, y)] = col_color;
-        if (rare && kind == PLANE) {  // sparkle: a few white twinkles in the dark pixels around the gold text
-            for (int k = 0; k < 4; k++) {
-                int x = random(MATRIX_W), y = random(MATRIX_H);
-                if (!(cols[x] & (1 << y))) leds[xy(x, y)] = CRGB(90, 90, 70);
+    } else if (exiting) {
+        for (int x = 0; x < MATRIX_W; x++) {
+            int p = exit_pos + x;  // position along the leaving text's pattern
+            uint8_t c;
+            out[x] = {0, 0, 0, CRGB::Black};
+            if (p >= exit_plan.scene_at) {
+                int i = p - exit_plan.scene_at;
+                if (i < MATRIX_W) out[x] = {cols[i], colon[i], here_level, here_color};
+            } else if (exit_text_at(exit_plan, p, exit_cols, c)) {
+                out[x] = {c, 0, 0, exit_color};
             }
         }
     }
-    FastLED.setBrightness((uint8_t)fmaxf(1, bright));
+    float use_bright = entering || exiting ? fmaxf(bright, from_bright) : bright;  // no sudden dimming mid-slide
+    last_bright = bright;
+    memcpy(drawn, out, sizeof(drawn));
+
+    FastLED.clear();
+    for (int x = 0; x < MATRIX_W; x++) {
+        CRGB dimc = out[x].c;
+        dimc.nscale8_video(out[x].dim_level);
+        for (int y = 0; y < MATRIX_H; y++) {
+            if (out[x].on & (1 << y)) leds[xy(x, y)] = out[x].c;
+            else if (out[x].dim & (1 << y)) leds[xy(x, y)] = dimc;
+        }
+    }
+    if (rare && kind == PLANE && !entering) {  // sparkle: a few white twinkles in the dark pixels around the gold text
+        for (int k = 0; k < 4; k++) {
+            int x = random(MATRIX_W), y = random(MATRIX_H);
+            if (!(out[x].on & (1 << y))) leds[xy(x, y)] = CRGB(90, 90, 70);
+        }
+    }
+    LOCK();  // the settings page's live copy of the sign
+    for (int x = 0; x < MATRIX_W; x++)
+        live_frame[x] = {out[x].on, out[x].dim, out[x].dim_level,
+                         ((uint32_t)out[x].c.r << 16) | ((uint32_t)out[x].c.g << 8) | out[x].c.b};
+    UNLOCK();
+    FastLED.setBrightness((uint8_t)fmaxf(1, use_bright));
     FastLED.show();
 }
 

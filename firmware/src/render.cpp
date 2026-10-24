@@ -88,8 +88,19 @@ double Marquee::seconds_for(int cycles) const {
     return SCROLL_HOLD_S + cycles * (double)cycle / (speed_ > 0 ? speed_ : S.scroll_speed);
 }
 
+int Marquee::cycle() const {
+    const int gap = 12;
+    int n = (int)cols_.size();
+    return n + gap > MATRIX_W + 4 ? n + gap : MATRIX_W + 4;   // short names still scroll fully off before repeating
+}
+
+int Marquee::offset(double now) const {
+    double t = now - t0_ - SCROLL_HOLD_S;
+    return t > 0 ? ((int)(t * (speed_ > 0 ? speed_ : S.scroll_speed))) % cycle() : 0;
+}
+
 void Marquee::frame(double now, uint8_t* out) const {
-    const int w = MATRIX_W, gap = 12;
+    const int w = MATRIX_W;
     int n = (int)cols_.size();
     for (int i = 0; i < w; i++) out[i] = 0;
     if (!n) return;
@@ -98,13 +109,37 @@ void Marquee::frame(double now, uint8_t* out) const {
         for (int i = 0; i < n; i++) out[pad + i] = cols_[i];
         return;
     }
-    int cycle = n + gap > w + 4 ? n + gap : w + 4;   // short names still scroll fully off before repeating
-    double t = now - t0_ - SCROLL_HOLD_S;
-    int off = t > 0 ? ((int)(t * (speed_ > 0 ? speed_ : S.scroll_speed))) % cycle : 0;
+    int cyc = cycle(), off = offset(now);
     for (int i = 0; i < w; i++) {
-        int k = (off + i) % cycle;
+        int k = (off + i) % cyc;
         out[i] = k < n ? cols_[k] : 0;
     }
+}
+
+// Rows top to bottom:  ......#..........
+//                      .....##..........
+//                      ....##....#+.+.+.
+//                      ###########......
+//                      ....##....#+.+.+.
+//                      .....##..........
+//                      ......#..........
+const uint8_t JET_ON[JET_W] = {0x08, 0x08, 0x08, 0x08, 0x1C, 0x3E, 0x6B, 0x08, 0x08, 0x08, 0x1C,
+                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t JET_DIM[JET_W] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                0x14, 0x00, 0x14, 0x00, 0x14, 0x00};
+
+ExitPlan plan_exit(int off, int n, int cycle) {
+    const int gap = 3;
+    ExitPlan e;
+    e.cycle = cycle > 0 ? cycle : 1;
+    e.n = n;
+    e.start = off;
+    e.text_end = n;
+    // the next copy has already started entering on the right: finish it too, rather than cut it off
+    if (n > 0 && e.cycle <= off + MATRIX_W - 1) e.text_end = e.cycle + n;
+    // the next picture comes in after the text, and never pops up inside the sign
+    e.scene_at = e.text_end + gap > off + MATRIX_W ? e.text_end + gap : off + MATRIX_W;
+    return e;
 }
 
 }  // namespace ov

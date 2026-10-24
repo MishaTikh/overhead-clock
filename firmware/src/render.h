@@ -22,6 +22,9 @@ public:
     // Fills 32 column bytes for time `now`.
     void frame(double now, uint8_t* out) const;
     const std::string& text() const { return text_; }
+    const std::vector<uint8_t>& columns() const { return cols_; }
+    int cycle() const;               // columns from one start of the text to the next
+    int offset(double now) const;    // how far the text has scrolled within its cycle
     void restart(double t0) { t0_ = t0; }   // start the hold-then-scroll again from time t0
 private:
     std::string text_;
@@ -30,6 +33,30 @@ private:
     float speed_ = 0;
     bool still_ = false;
 };
+
+// The little jet that tows a plane's city onto the sign (swept jet with fading contrails), nose first.
+// JET_ON is lit at full colour, JET_DIM (the contrails) at about a third.
+const int JET_W = 17;
+extern const uint8_t JET_ON[JET_W], JET_DIM[JET_W];
+
+// When a plane has passed, the city doesn't stop mid-word: whatever copy of the name is on the sign scrolls
+// on until it's complete, then the next picture (the time) follows it in from the right.
+// Positions are along the marquee's pattern (copy k of the text starts at k * cycle).
+struct ExitPlan {
+    int start = 0;      // the pattern position at the sign's left edge when the plane went quiet
+    int text_end = 0;   // text past this position isn't drawn (the copy after it never starts)
+    int scene_at = 0;   // the next picture's first column sits here
+    int cycle = 1, n = 0;
+};
+ExitPlan plan_exit(int off, int n, int cycle);
+// What the exit shows at pattern position p: true and the text column if text, false if blank or scene.
+inline bool exit_text_at(const ExitPlan& e, int p, const std::vector<uint8_t>& cols, uint8_t& out) {
+    if (p >= e.text_end || p >= e.scene_at || e.n == 0) return false;
+    int k = p % e.cycle;
+    if (k >= e.n) return false;
+    out = cols[k];
+    return true;
+}
 
 // A short show on the sign: scrolling steps and still pages, played in order, that the
 // buttons can also step through. Used to show the settings address and password.

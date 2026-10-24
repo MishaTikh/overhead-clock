@@ -150,6 +150,35 @@ int main(int argc, char** argv) {
         CHECK(lit == 6);                               // second of three pages
         CHECK(!q.frame(330.0, f));                     // closes 2 minutes after the last press
     }
+    // plane exits: whatever part of the name is on the sign always finishes; nothing is cut mid-word
+    {
+        std::vector<uint8_t> cols = text_columns("APPLETON");
+        int n = (int)cols.size();
+        Marquee mq; mq.set_text("APPLETON", 0, 20);
+        int cyc = mq.cycle();
+        CHECK(cyc == n + 12);
+        for (int off = 0; off < cyc; off++) {
+            ExitPlan e = plan_exit(off, n, cyc);
+            CHECK(e.scene_at >= off + 32);                 // the time enters from the right, never pops in
+            // every text column visible at the moment of exit is part of a copy that completes
+            for (int x = 0; x < 32; x++) {
+                int p = off + x, k = p % cyc;
+                if (k < n) {
+                    int copy_end = (p / cyc) * cyc + n;
+                    CHECK(copy_end <= e.text_end);
+                }
+            }
+            CHECK(e.scene_at >= e.text_end + 3);
+            uint8_t c;
+            CHECK(!exit_text_at(e, e.text_end, cols, c));   // nothing after the finished copy
+        }
+        // short name: one copy, then the time
+        ExitPlan s = plan_exit(5, 10, 36);
+        CHECK(s.text_end == 10 && s.scene_at == 37);
+        // jet bitmap: 7 rows tall at most, nose at the left, contrails behind
+        int top = 0; for (int x = 0; x < JET_W; x++) top |= JET_ON[x] | JET_DIM[x];
+        CHECK(top < 0x80 && JET_ON[0] == 0x08 && JET_DIM[JET_W - 2] == 0x14);
+    }
     // 8. clock face
     clock_frame(21, 45, true, false, cols);
     printf("clock 21:45 (12 h)\n");

@@ -47,6 +47,10 @@ void settings_load() {
     S.off_db = prefs.getFloat("off_db", OFF_DB);
     S.cal_offset = prefs.getFloat("cal", CAL_OFFSET_DB);
     S.daily_budget = prefs.getInt("budget", DAILY_BUDGET);
+    S.jet_banner = prefs.getBool("jet", true);
+    S.breathe = prefs.getBool("breathe", true);
+    S.milestones = prefs.getBool("miles", true);
+    S.warm_night = prefs.getBool("warm", true);
     prefs.end();
     if (location_set()) resolve_airport();
 }
@@ -89,6 +93,10 @@ void settings_save() {
     prefs.putFloat("off_db", S.off_db);
     prefs.putFloat("cal", S.cal_offset);
     prefs.putInt("budget", S.daily_budget);
+    prefs.putBool("jet", S.jet_banner);
+    prefs.putBool("breathe", S.breathe);
+    prefs.putBool("miles", S.milestones);
+    prefs.putBool("warm", S.warm_night);
     prefs.end();
 }
 
@@ -142,6 +150,10 @@ void settings_to_json(JsonObject o) {
     o["off_db"] = S.off_db;
     o["cal_offset"] = S.cal_offset;
     o["daily_budget"] = S.daily_budget;
+    o["jet_banner"] = S.jet_banner;
+    o["breathe"] = S.breathe;
+    o["milestones"] = S.milestones;
+    o["warm_night"] = S.warm_night;
 }
 
 String settings_apply_json(JsonObjectConst in) {
@@ -207,6 +219,10 @@ String settings_apply_json(JsonObjectConst in) {
     flag("recap", S.recap);
     flag("smart_polling", S.smart_polling);
     flag("airport_board", S.airport_board);
+    flag("jet_banner", S.jet_banner);
+    flag("breathe", S.breathe);
+    flag("milestones", S.milestones);
+    flag("warm_night", S.warm_night);
     if (in["ntp_server"].is<const char*>()) {
         String h = in["ntp_server"].as<const char*>();
         h.trim();
