@@ -61,7 +61,7 @@ jobs:
           cp $B/firmware.bin release/overhead-tc001-app.bin   # for installs and updates over Wi-Fi
           sha256sum release/*.bin | tee release/SHA256SUMS
           mkdir -p installer-pkg
-          cp ../installer/Install-Overhead.bat ../installer/install-overhead.ps1 release/overhead-tc001-app.bin installer-pkg/
+          cp ../installer/Install-Overhead.bat ../installer/install-overhead.ps1 ../installer/README.txt release/overhead-tc001-app.bin installer-pkg/
           (cd installer-pkg && zip -q ../release/overhead-installer.zip *)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

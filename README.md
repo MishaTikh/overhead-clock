@@ -48,20 +48,24 @@ being a clock. No computer, server or account: it just needs Wi-Fi.
   sample planes when you change the look, and an optional "remember this phone". Plus today's planes (kept across restarts), the hours planes usually pass over
   you, airport weather, and the clock's own health: uptime, why it last restarted, free memory.
 
-## Get started
-Everything happens over Wi-Fi: no cables, drivers or flashing tools.
+## Install in three steps
+**The friendly walkthrough is at [mishatikh.github.io/overhead-clock](https://mishatikh.github.io/overhead-clock/).**
+Everything happens over Wi-Fi: no cables, drivers or flashing tools. About 10 minutes.
 
 1. **Put the clock on your Wi-Fi.** A new TC001 shows `192.168.4.1`: join the clock's Wi-Fi network on your phone,
    open http://192.168.4.1 and choose your home network.
-2. **Install Overhead.** Download the latest [release](https://github.com/MishaTikh/overhead-clock/releases)
-   (`overhead-installer.zip`), unzip it on a Windows PC on the same Wi-Fi and double-click **Install-Overhead.bat**.
-   It finds the clock and installs Overhead in about 30 seconds.
-   *On a Mac, Linux or phone:* open http://clock.local/update in a browser, choose `overhead-tc001-app.bin` and upload.
-3. **Sign in.** Hold the clock's middle button for 3 seconds, until the display changes: it shows its settings
-   address, then the password four characters at a time (left and right buttons step through). Open the address, sign in as `admin` and type your street address.
+2. **Run the installer.** [**Download overhead-installer.zip**](https://github.com/MishaTikh/overhead-clock/releases/latest/download/overhead-installer.zip)
+   on a Windows PC on the same Wi-Fi, *Extract all*, and double-click **Install-Overhead.bat**. A window finds the
+   clock and installs Overhead in about 30 seconds. (If Windows asks whether you're sure, click *Run*.)
+   *Mac, Linux or phone:* open http://clock.local/update in a browser, choose
+   [overhead-tc001-app.bin](https://github.com/MishaTikh/overhead-clock/releases/latest/download/overhead-tc001-app.bin) and upload.
+3. **Tell it where you live.** Hold the clock's middle button for 3 seconds: it shows its settings address, then the
+   password four characters at a time (left and right buttons step through). Open the address on your phone, sign in
+   as `admin` and type your street address.
 
-Updating later works the same way: run the installer again, or use *Update firmware* on the settings page.
-Details and troubleshooting are in the [quick start guide](docs/Overhead-Quick-Start.pdf).
+Updating later: run the installer again, or *More settings → Wi-Fi and security → Update firmware* on the settings
+page. Settings are kept. More help: the [website](https://mishatikh.github.io/overhead-clock/) and the
+[quick start guide (PDF)](docs/Overhead-Quick-Start.pdf).
 
 > Flashing the TC001 over USB doesn't work reliably from Windows (its auto-reset circuit doesn't enter flashing mode
 > there), which is why installs go over Wi-Fi. On Linux or macOS, USB flashing with the merged image from the CI

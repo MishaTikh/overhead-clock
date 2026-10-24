@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Get Overhead</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Install Overhead on an Ulanzi TC001 clock in three steps: put the clock on Wi-Fi, run the installer, enter your address.">
+<style>
+  :root {
+    --bg: #f4f2ec; --panel: #fffdf8; --fg: #1d1f22; --muted: #686c73; --line: #ddd9d0; --accent: #c4410f; --accent-fg: #fff;
+    --face: #0b0b0b; --ok: #2f7f53; --warn: #a3650b;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121315; --panel: #1b1c1f; --fg: #e9e7e3; --muted: #9b9fa6; --line: #2c2e32; --accent: #ff7a3d; --accent-fg: #1a0d05; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 var(--sans); }
+  main { max-width: 680px; margin: 0 auto; padding: 28px 20px 72px; }
+  h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .lede { color: var(--muted); margin: 0 0 22px; font-size: 1.05rem; }
+  .video { background: var(--face); border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; margin: 0 0 28px; }
+  .video video { width: 100%; height: 100%; display: block; }
+  h2 { font-size: 1.35rem; margin: 36px 0 12px; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin: 0 0 14px; display: grid; grid-template-columns: 44px 1fr; gap: 14px; }
+  .num { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 1.25rem; display: grid; place-items: center; }
+  .step h3 { margin: 6px 0 6px; font-size: 1.1rem; }
+  .step p { margin: 0 0 8px; }
+  .step p:last-child { margin-bottom: 0; }
+  .btn { display: inline-block; background: var(--accent); color: var(--accent-fg); text-decoration: none; font-weight: 700; padding: 14px 22px; border-radius: 12px; font-size: 1.1rem; margin: 6px 0 10px; }
+  .btn:hover { filter: brightness(1.08); }
+  .small { color: var(--muted); font-size: 0.92rem; }
+  code, .mono { font-family: var(--mono); font-size: 0.95em; background: var(--line); padding: 1px 6px; border-radius: 5px; }
+  .note { border-left: 4px solid var(--warn); padding: 8px 14px; background: var(--panel); border-radius: 0 10px 10px 0; margin: 10px 0; }
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 18px; margin: 0 0 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details p { margin: 10px 0 0; }
+  a { color: var(--accent); }
+  footer { margin-top: 44px; color: var(--muted); font-size: 0.9rem; }
+  .sign { display: inline-block; background: var(--face); color: #ff9a3c; font-family: var(--mono); letter-spacing: 0.12em; padding: 4px 10px; border-radius: 6px; }
+</style>
+
+<main>
+  <h1>Overhead</h1>
+  <p class="lede">A little clock that tells you where the plane over your house is coming from, only while you can hear it. Free, open source, for the Ulanzi TC001 pixel clock (about $50).</p>
+
+  <div class="video"><video controls playsinline preload="metadata" poster="media/overhead-cover.jpg" src="media/overhead-teaser.mp4"></video></div>
+
+  <h2>Install in three steps</h2>
+  <p class="small">You need: an Ulanzi TC001 clock, your home Wi-Fi password, a phone, and a Windows PC for step 2 (Mac? see below). No cables, no drivers. About 10 minutes.</p>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div>
+      <h3>Put the clock on your Wi-Fi</h3>
+      <p>Plug the clock in. A new clock shows <span class="sign">192.168.4.1</span> on its display: on your phone, join the Wi-Fi network the clock creates, open <code>http://192.168.4.1</code> in the browser, and choose your home Wi-Fi.</p>
+      <p class="small">The clock then joins your Wi-Fi and shows a clock. Reconnect your phone to your home Wi-Fi.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div>
+      <h3>Run the installer</h3>
+      <p><a class="btn" href="https://github.com/MishaTikh/overhead-clock/releases/latest/download/overhead-installer.zip">Download the installer (Windows)</a></p>
+      <p>Open the downloaded <code>overhead-installer.zip</code>, click <b>Extract all</b>, then double-click <b>Install-Overhead.bat</b> in the extracted folder. The window finds the clock on your Wi-Fi and installs Overhead in about 30 seconds.</p>
+      <div class="note"><b>If Windows asks “Are you sure you want to run this file?”</b> click <b>Run</b>. If it says “Windows protected your PC”, click <b>More info</b>, then <b>Run anyway</b>. Windows shows that for any program downloaded from the internet.</div>
+      <p class="small"><b>Mac, Linux or phone:</b> download <a href="https://github.com/MishaTikh/overhead-clock/releases/latest/download/overhead-tc001-app.bin">overhead-tc001-app.bin</a>, open <code>http://clock.local/update</code> in a browser while on the same Wi-Fi, choose the file and upload it.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div>
+      <h3>Tell it where you live</h3>
+      <p>Hold the clock's <b>middle button for 3 seconds</b>. The display shows the clock's address, then its password four characters at a time (the left and right buttons step through it).</p>
+      <p>On your phone, open that address, sign in as <code>admin</code> with the password, and type your street address. Done: the clock finds your nearest airport and starts listening.</p>
+    </div>
+  </div>
+
+  <h2>Already have Overhead?</h2>
+  <p>Updates are easier still: run the installer again, or on the clock's settings page open <b>More settings → Wi-Fi and security → Update firmware</b> and choose the new <code>overhead-tc001-app.bin</code>. Your settings are kept.</p>
+
+  <h2>If something doesn't work</h2>
+  <details><summary>The installer says it can't find the clock</summary>
+    <p>Make sure the clock is on and shows a time (so it's on Wi-Fi), and that the PC is on the same Wi-Fi, not a guest network or a phone hotspot. Then type the clock's address in the box and press Find. A new clock is usually <code>clock.local</code>; a clock running Overhead is <code>overhead.local</code>. If names don't work, the clock shows its address when you hold the middle button.</p></details>
+  <details><summary>Windows won't open the installer</summary>
+    <p>Right-click <b>Install-Overhead.bat</b>, choose Properties, tick <b>Unblock</b> at the bottom, click OK, then double-click it again. (This is Windows' rule for files from the internet.)</p></details>
+  <details><summary>The clock only shows the time, never a plane</summary>
+    <p>Open the settings page and check that your address was found (Home location) and the nearest airport is right. Planes show only while the clock reckons you can hear them; the dashboard's “Nearby and recent” table shows what it's tracking. If it says “Can't reach flight data”, give it a minute; it retries on its own.</p></details>
+  <details><summary>I forgot the password</summary>
+    <p>Hold the middle button for 3 seconds: the clock shows it again. The password can be changed on the settings page.</p></details>
+  <details><summary>I want to start over</summary>
+    <p>Hold the <b>left</b> button while plugging the clock in: it forgets its Wi-Fi and shows the setup network again. Your address and settings are kept.</p></details>
+
+  <footer>
+    <p>Overhead is open source (MIT): <a href="https://github.com/MishaTikh/overhead-clock">github.com/MishaTikh/overhead-clock</a>. Questions and problems: <a href="https://github.com/MishaTikh/overhead-clock/issues">open an issue</a>.</p>
+    <p>Not affiliated with Ulanzi, any airline or airport. Flight data from adsb.lol. For fun, not navigation.</p>
+  </footer>
+</main>
+</html>
