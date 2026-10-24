@@ -323,11 +323,14 @@ static bool fetch_aircraft(double home_lat, double home_lon, std::vector<Fix>& o
         set_error(String("flight data: ") + err.c_str());
         return false;
     }
+    LOCK();
+    float baro_corr = tracker.baro_corr_ft;
+    UNLOCK();
     for (JsonObject a : doc["ac"].as<JsonArray>()) {
         if (!a["lat"].is<float>()) continue;
         float alt;
         if (a["alt_geom"].is<float>()) alt = a["alt_geom"];
-        else if (a["alt_baro"].is<float>()) alt = a["alt_baro"];
+        else if (a["alt_baro"].is<float>()) alt = a["alt_baro"].as<float>() + baro_corr;  // pressure altitude -> true
         else continue;  // "ground" or missing
         Fix f;
         const char* hex = a["hex"] | "";
@@ -563,9 +566,21 @@ static void fetch_weather(const std::string& airport, double home_lat, double ho
     w.cover = m["cover"] | "";
     w.raw = m["rawOb"] | "";
     FlowInfo fl = flow_for(airport, home_lat, home_lon, w);
+    // altimeter setting ("A3028" = 30.28 inHg): pressure altitude is off by about 1,000 ft per inch from standard
+    float corr = 0;
+    size_t ai = w.raw.find(" A");
+    while (ai != std::string::npos) {
+        if (ai + 6 <= w.raw.size() && isdigit((unsigned char)w.raw[ai + 2]) && isdigit((unsigned char)w.raw[ai + 3]) &&
+            isdigit((unsigned char)w.raw[ai + 4]) && isdigit((unsigned char)w.raw[ai + 5])) {
+            corr = (atoi(w.raw.substr(ai + 2, 4).c_str()) / 100.0f - 29.92f) * 1000.0f;
+            break;
+        }
+        ai = w.raw.find(" A", ai + 1);
+    }
     LOCK();
     weather = w;
     flow = fl;
+    tracker.baro_corr_ft = corr;
     UNLOCK();
 }
 
@@ -606,7 +621,7 @@ static void save_today() {
         const Pass& p = tracker.passes[i];
         JsonObject o = d["passes"].add<JsonObject>();
         o["t"] = (uint32_t)p.start; o["cs"] = p.cs; o["ty"] = p.type; o["c"] = p.city; o["o"] = p.other_iata;
-        o["r"] = p.rare; o["pk"] = p.peak; o["agl"] = p.agl; o["s"] = p.secs; o["d"] = p.dep;
+        o["r"] = p.rare; o["pk"] = p.peak; o["agl"] = p.agl; o["s"] = p.secs; o["d"] = p.dep; o["w"] = p.wait;
     }
     UNLOCK();
     String out;
@@ -654,6 +669,7 @@ static void load_today(int yday) {
         ps.peak = o["pk"] | 0.0f;
         ps.agl = o["agl"] | 0;
         ps.secs = o["s"] | 0.0f;
+        ps.wait = o["w"] | 0.0f;
         ps.dep = o["d"] | false;
     }
     UNLOCK();
@@ -1173,6 +1189,7 @@ static void api_status() {
         p["peak"] = ps.peak;
         p["agl_ft"] = ps.agl;
         p["secs"] = ps.secs;
+        p["wait"] = ps.wait;
     }
     UNLOCK();
     send_json(d);

@@ -4,7 +4,7 @@
 // address entered during setup, so nothing in this file is specific to one place.
 #pragma once
 
-#define FW_VERSION      "0.2.0"
+#define FW_VERSION      "0.2.1"
 #define PROJECT_URL     "https://github.com/MishaTikh/overhead-clock"
 #define HOSTNAME        "overhead"           // http://overhead.local
 #define MAX_AIRPORT_NM  60.0                 // nearest-airport search radius
@@ -38,7 +38,7 @@
 #define OFF_DB               57.0f    // [web] hysteresis
 #define CAL_OFFSET_DB        0.0f     // [web] nudge after listening
 #define MIN_SHOW_S           6.0f
-#define ROUTE_WAIT_S         4.0       // wait this long for a route lookup before showing the callsign
+#define ROUTE_WAIT_S         2.5       // wait at most this long for a route lookup before showing the callsign
 
 // ---------------------------------------------------------------- display
 #define MODE                 1        // [web] 1 clock (interrupted by planes), 0 planes only (dark otherwise)

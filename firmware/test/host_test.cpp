@@ -63,6 +63,11 @@ int main(int argc, char** argv) {
     printf("pass: on at %.0f s, off at %.0f s (%.0f s audible), peak %.1f dBA, text '%s'\n", on, off, off - on, peak, tr.msg.text.c_str());
     CHECK(on > 0 && off > on && off - on > 20 && off - on < 50);
     CHECK(peak > 70 && peak < 78);   // A320-class at ~2,200 ft overhead
+    // loudness by type when the feed gives no size category: a 737 sounds like an A3, a 777 like a heavy
+    CHECK(level_at("", "B738", false, 3000, 2000) == level_at("A3", nullptr, false, 3000, 2000));
+    CHECK(level_at("", "B77W", false, 3000, 2000) > level_at("", "CRJ9", false, 3000, 2000) + 5);
+    CHECK(level_at("", "C172", false, 3000, 2000) < level_at("", "B738", false, 3000, 2000) - 10);
+    CHECK(level_at("A5", "C172", false, 3000, 2000) == level_at("A5", nullptr, false, 3000, 2000));  // a real category wins
     // early route lookup: queued on the first fix, minutes out, for a plane headed over the house only
     {
         double lat, lon;

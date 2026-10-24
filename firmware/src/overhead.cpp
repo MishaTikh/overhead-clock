@@ -37,8 +37,33 @@ void move(double lat, double lon, double brg_deg, double dist_ft, double& olat, 
 }
 
 // ================================================================ acoustics
-static float source_level(const char* cat, bool departing) {
+// Many aircraft send no size category (older transponders), but the feed knows the type: use that to
+// pick the right class. Prefixes of ICAO type codes.
+static char category_from_type(const char* type) {
+    if (!type || !type[0]) return 0;
+    static const char* heavy[] = {"A33", "A34", "A35", "A38", "B74", "B76", "B77", "B78", "MD1", "DC1", "A3ST", "C17", "K35", "IL"};
+    static const char* b757[] = {"B75"};
+    static const char* medium[] = {"A19", "A20", "A21", "A31", "A32", "B72", "B73", "B38", "B39", "E17", "E19", "E29", "E75", "E90",
+                                   "E95", "CRJ", "BCS", "MD8", "MD9", "DH8", "AT4", "AT7", "DC9", "SB20", "RJ"};
+    static const char* small[] = {"C25", "C50", "C55", "C56", "C68", "C70", "C75", "CL3", "CL6", "GLF", "GL", "GA", "E35", "E50",
+                                  "E55", "LJ", "H25", "F2T", "F90", "FA", "PC12", "PC24", "B350", "BE20", "BE30", "BE40", "BE9", "SW", "SF34", "C130", "C30"};
+    static const char* light[] = {"C1", "C2", "P28", "PA", "SR2", "BE3", "BE5", "BE6", "BE7", "BE8", "M20", "DA", "RV", "G", "AA5", "AC", "CH7", "PIPA", "TB"};
+    static const char* heli[] = {"R22", "R44", "R66", "EC", "AS3", "AS5", "B06", "B407", "B429", "B412", "H60", "H53", "UH1", "S76", "S92", "A109", "A139", "AW", "BK17", "H47", "EH10", "MD50", "MD52", "MD60", "MD90"};
+    struct Group { const char** list; int n; char cat; };
+    Group groups[] = {
+        {heli, (int)(sizeof(heli) / sizeof(*heli)), '7'}, {heavy, (int)(sizeof(heavy) / sizeof(*heavy)), '5'}, {b757, 1, '4'},
+        {medium, (int)(sizeof(medium) / sizeof(*medium)), '3'}, {small, (int)(sizeof(small) / sizeof(*small)), '2'},
+        {light, (int)(sizeof(light) / sizeof(*light)), '1'}};
+    for (auto& g : groups)
+        for (int i = 0; i < g.n; i++)
+            if (!strncmp(type, g.list[i], strlen(g.list[i]))) return g.cat;
+    return 0;
+}
+
+static float source_level(const char* cat, bool departing, const char* type = nullptr) {
     float base = SRC_UNK;
+    char guessed[3] = {'A', category_from_type(type), 0};
+    if (!(cat && cat[0] == 'A' && cat[1] >= '1' && cat[1] <= '7') && guessed[1]) cat = guessed;
     if (cat && cat[0] == 'A') {
         switch (cat[1]) {
             case '1': base = SRC_A1; break;
@@ -59,11 +84,11 @@ static float ground_effect(float elev_deg) {
     return GROUND_MAX_DB * (GROUND_ZERO_DEG - elev_deg) / (GROUND_ZERO_DEG - GROUND_FULL_DEG);
 }
 
-float level_at(const char* category, bool departing, float horiz_ft, float height_ft) {
+float level_at(const char* category, const char* type, bool departing, float horiz_ft, float height_ft) {
     height_ft = fmaxf(height_ft, 50.0f);
     float r = fmaxf(hypotf(horiz_ft, height_ft), 100.0f);
     float elev = atan2f(height_ft, horiz_ft) / (float)D2R;
-    return source_level(category, departing) - 20.0f * log10f(r / 1000.0f)
+    return source_level(category, departing, type) - 20.0f * log10f(r / 1000.0f)
            - ABSORB_DB_PER_KFT * (r - 1000.0f) / 1000.0f - ground_effect(elev) + S.cal_offset;
 }
 
@@ -481,7 +506,7 @@ void Tracker::ingest(const std::vector<Fix>& fixes, double fetch_time) {
         if (t.used && t.f.cs[0] && will_pass_over(t, fetch_time)) routes.get(t.f.cs, is_departing(t), fetch_time);
 }
 
-// Straight-line closest approach: within 2 nm of the house in the next 10 minutes, low enough to be heard.
+// Straight-line closest approach: within 3 nm of the house in the next 15 minutes, low enough to be heard.
 bool Tracker::will_pass_over(const Track& t, double now) const {
     double lat, lon, d, brg;
     float alt;
@@ -494,7 +519,7 @@ bool Tracker::will_pass_over(const Track& t, double now) const {
     double vx = v * sin(t.f.trk * D2R), vy = v * cos(t.f.trk * D2R);
     double t_cpa = -(x * vx + y * vy) / (v * v);
     double miss = hypot(x + vx * t_cpa, y + vy * t_cpa);
-    return t_cpa > 0 && t_cpa < 600 && miss < 2 * NM_FT && alt - S.home_elev < 12000;
+    return t_cpa > 0 && t_cpa < 900 && miss < 3 * NM_FT && alt - S.home_elev < 12000;
 }
 
 bool Tracker::is_departing(const Track& t) const {
@@ -519,7 +544,7 @@ void Tracker::heard_level(Track& t, double now, float& slant) {
     t.horiz_ft = (float)horiz;
     t.agl_ft = h;
     slant = (float)hypot(horiz, h);
-    t.level = level_at(t.f.cat, t.departing, (float)horiz, h);
+    t.level = level_at(t.f.cat, t.f.type, t.departing, (float)horiz, h);
 }
 
 void Tracker::tick(double now) {
@@ -541,7 +566,7 @@ void Tracker::tick(double now) {
             if (slant < t.pass_min_slant) { t.pass_min_slant = slant; t.pass_agl = t.agl_ft; }
             if (t.level < S.off_db) end_pass(t, now);
         }
-        if (t.level > S.on_db - 20 && t.f.cs[0]) routes.get(t.f.cs, t.departing, now);  // warm cache early
+        if (t.level > S.on_db - 25 && t.f.cs[0]) routes.get(t.f.cs, t.departing, now);  // warm cache early
     }
     choose(now);
 }
@@ -569,6 +594,7 @@ void Tracker::choose(double now) {
         msg.active = true;
         msg.hex = best->f.hex;
         msg.since = now;
+        best->pass_wait = (float)(now - best->pass_start);
         msg.level = best->level;
         fill_text(msg, *best, now);
     }
@@ -595,6 +621,7 @@ void Tracker::end_pass(Track& t, double now) {
     Pass& p = passes[0];
     memset(&p, 0, sizeof(p));
     p.start = (time_t)t.pass_start;
+    p.wait = t.pass_wait;
     strncpy(p.cs, t.f.cs, 8);
     strncpy(p.type, t.f.type, 4);
     RouteEntry* e = t.f.cs[0] ? routes.get(t.f.cs, t.departing, now) : nullptr;
@@ -626,7 +653,7 @@ void Tracker::update_inbound(double now) {
             t.predict(now + dt, lat, lon, alt);
             dist_bearing_ft(S.home_lat, S.home_lon, lat, lon, d, brg);
             float h = alt - S.home_elev;
-            if (level_at(t.f.cat, t.departing, (float)d, h) >= S.on_db) {
+            if (level_at(t.f.cat, t.f.type, t.departing, (float)d, h) >= S.on_db) {
                 float eta = dt + (float)(hypot(d, h) / SPEED_OF_SOUND_FPS);
                 if (inbound_s < 0 || eta < inbound_s) { inbound_s = eta; inbound_cs = t.f.cs; }
                 break;

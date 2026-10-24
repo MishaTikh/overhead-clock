@@ -206,7 +206,7 @@
       <tbody id="planes"></tbody>
     </table></div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Heard at</th><th>Flight</th><th>From or to</th><th class="num">Peak dBA</th><th class="num">Seconds</th></tr></thead>
+      <thead><tr><th>Heard at</th><th>Flight</th><th>From or to</th><th class="num">Peak dBA</th><th class="num">Seconds</th><th class="num">Delay</th></tr></thead>
       <tbody id="passes"></tbody>
     </table></div>
   </section>
@@ -360,8 +360,8 @@
     usual_by_hour: [0,0,0,0,0,0.4,2.1,4.2,3.8,3.1,3.4,3.0,2.6,2.9,3.3,3.7,4.1,3.6,2.8,2.2,1.4,0.6,0.2,0], usual_days: 12, inbound_s: -1,
     planes: [ { cs: "DAL2159", type: "B739", dist_nm: 2.1, agl_ft: 2350, db: 54.8, dep: false },
               { cs: "SKW3829", type: "CRJ9", dist_nm: 6.4, agl_ft: 3700, db: 31.2, dep: false } ],
-    passes: [ { t: 0, cs: "SCX284", type: "B738", city: "Seattle", peak: 76.9, agl_ft: 1567, secs: 29 },
-              { t: 0, cs: "DAL2820", type: "BCS1", city: "Charlotte", peak: 60.9, agl_ft: 1645, secs: 14 } ] };
+    passes: [ { t: 0, cs: "SCX284", type: "B738", city: "Seattle", peak: 76.9, agl_ft: 1567, secs: 29, wait: 0 },
+              { t: 0, cs: "DAL2820", type: "BCS1", city: "Charlotte", peak: 60.9, agl_ft: 1645, secs: 14, wait: 2.3 } ] };
 
   async function api(path, body) {
     if (demo) return demoApi(path, body);
@@ -573,8 +573,8 @@
     const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     $("planes").innerHTML = s.planes.length ? s.planes.map(p => `<tr><td>${esc(p.cs || "?")}</td><td>${esc(p.type)}</td><td class="num">${(p.dist_nm * 1.15078).toFixed(1)}</td><td class="num">${Math.round(p.agl_ft).toLocaleString()} ft</td><td class="num">${p.db.toFixed(1)}</td></tr>`).join("")
       : `<tr><td colspan="5" class="hint">No aircraft nearby right now.</td></tr>`;
-    $("passes").innerHTML = s.passes.length ? s.passes.map(p => `<tr><td>${p.t ? new Date(p.t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "earlier"}</td><td>${esc(p.cs)}</td><td>${esc(p.city || "—")}</td><td class="num">${p.peak.toFixed(1)}</td><td class="num">${Math.round(p.secs)}</td></tr>`).join("")
-      : `<tr><td colspan="5" class="hint">No audible planes yet today.</td></tr>`;
+    $("passes").innerHTML = s.passes.length ? s.passes.map(p => `<tr><td>${p.t ? new Date(p.t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "earlier"}</td><td>${esc(p.cs)}</td><td>${esc(p.city || "—")}</td><td class="num">${p.peak.toFixed(1)}</td><td class="num">${Math.round(p.secs)}</td><td class="num">${(p.wait || 0).toFixed(1)} s</td></tr>`).join("")
+      : `<tr><td colspan="6" class="hint">No audible planes yet today.</td></tr>`;
     const bars = s.wifi.rssi > -60 ? "strong" : s.wifi.rssi > -72 ? "fair" : "weak";
     $("netinfo").innerHTML = "";
     for (const [k, v] of [["Network", s.wifi.ssid], ["Signal", `${bars} (${s.wifi.rssi} dBm)`], ["Clock's address", s.wifi.ip],

@@ -69,7 +69,10 @@ const char* posix_for_zone(const std::string& iana);
 // ---------------------------------------------------------------- geometry
 void dist_bearing_ft(double lat1, double lon1, double lat2, double lon2, double& dist, double& brg);
 void move(double lat, double lon, double brg_deg, double dist_ft, double& olat, double& olon);
-float level_at(const char* category, bool departing, float horiz_ft, float height_ft);
+float level_at(const char* category, const char* type, bool departing, float horiz_ft, float height_ft);
+inline float level_at(const char* category, bool departing, float horiz_ft, float height_ft) {
+    return level_at(category, nullptr, departing, horiz_ft, height_ft);
+}
 
 // ---------------------------------------------------------------- routes
 struct Route {
@@ -137,13 +140,14 @@ struct Track {
     bool in_pass = false;
     double pass_start = 0;
     float pass_peak = -99, pass_min_slant = 1e9f, pass_agl = 0;
+    float pass_wait = 0;          // seconds the sign waited for the route lookup before showing this plane
     std::string rare;             // rare_label() of this aircraft, "" if ordinary
     void predict(double t, double& lat, double& lon, float& alt) const;
 };
 
 struct Pass {
     time_t start; char cs[9]; char type[5]; char city[28]; char other_iata[4]; char rare[12];
-    float peak; int agl; float secs; bool dep;
+    float peak; int agl; float secs; bool dep; float wait;
 };
 
 struct Message {
@@ -170,6 +174,7 @@ public:
     DayStats stats;
     float inbound_s = -1;         // seconds until the next plane becomes audible (<= 30), or -1
     std::string inbound_cs;
+    float baro_corr_ft = 0;       // true altitude - pressure altitude today, from the airport's altimeter setting
 
     void ingest(const std::vector<Fix>& fixes, double fetch_time);
     void tick(double now);

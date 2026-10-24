@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1
+- Installer with a window: finds the clock, shows what it runs (version, uptime, last restart) and what the file
+  contains (version, size, SHA-256), warns before installing the same or an older version, and confirms the clock
+  came back on the new one.
+- Loudness by aircraft type when the feed gives no size category (a 777 sounds like a heavy, a Cessna like a light
+  piston), instead of one generic level.
+- Barometric-only altitudes are corrected with the airport's altimeter setting from the METAR.
+- Route lookups start earlier and wider (15 minutes out, 3 nm either side), and the sign waits at most 2.5 s for one.
+- The dashboard's recent-planes table shows how long each plane waited for its route before it was shown.
+
 ## 0.2.0
 A pleasure to watch:
 - A little jet with contrails tows each plane's city onto the sign, pushing the time out.
