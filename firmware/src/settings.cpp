@@ -48,7 +48,7 @@ void settings_load() {
     S.cal_offset = prefs.getFloat("cal", CAL_OFFSET_DB);
     S.daily_budget = prefs.getInt("budget", DAILY_BUDGET);
     S.jet_banner = prefs.getBool("jet", true);
-    S.breathe = prefs.getBool("breathe", true);
+    S.breathe = prefs.getBool("breathe", false);
     S.milestones = prefs.getBool("miles", true);
     S.warm_night = prefs.getBool("warm", true);
     prefs.end();

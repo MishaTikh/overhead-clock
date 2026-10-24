@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0
+A pleasure to watch:
+- A little jet with contrails tows each plane's city onto the sign, pushing the time out.
+- When the plane has passed, the name finishes scrolling (never cut off mid-word), then the time follows it back in.
+- Optional, off by default: in planes-only mode the city glows brighter as the plane gets louder and fades as it
+  leaves (More settings, The look).
+- Milestones in gold: the first plane of the day, every hundredth, and a new farthest-ever city.
+- A warmer amber clock between sunset and sunrise, and a colon that breathes instead of blinking.
+- The clock's own screens (temperature, date, recap) glide in and out; button feedback stays instant.
+
+Easy to use:
+- The settings page shows a live copy of the sign: the clock's real pixels, five times a second.
+- Changing the style, colors, jet, breathing or scroll speed flies a sample plane across the clock.
+- Remember this phone for 30 days (optional), with sign-out for one or all phones. Firmware updates still ask
+  for the password.
+- The page opens with the everyday settings (mode, what to show, brightness, colors); everything else is under
+  More settings.
+- The sign-in replay check now lets requests sent together arrive in any order.
+
 ## 0.1.8
 Security hardening, after a review of the settings page, the update path and the internet fetches
 (see SECURITY.md). Updates from this version on need this version's settings page or installer.

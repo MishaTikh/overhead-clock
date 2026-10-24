@@ -44,8 +44,14 @@ This section says what it does and, just as important, what it doesn't protect a
   own script, identified by its hash: an injected script could never run. Device data shown on the page (flight
   numbers, cities, network names) is escaped as well.
 - **Replay.** A Digest header only works for the path it was made for, and only once: browsers number their requests
-  per challenge, and a request whose number isn't higher than the last one seen is refused. So a captured header can't
-  be replayed to restart the clock, forget its Wi-Fi or change a setting.
+  per challenge, and each number is accepted once (a window of the last 64 lets requests sent together arrive in any
+  order). So a captured header can't be replayed to restart the clock, forget its Wi-Fi or change a setting.
+- **Remember this phone (optional, off until you turn it on).** A random token goes into a cookie that's HttpOnly,
+  `SameSite=Strict` and lasts 30 days; the clock stores only its SHA-256, for up to four phones. Changes still need the
+  custom header, so other websites can't use the cookie. The trade-off: the page is plain HTTP, so someone who can read
+  your Wi-Fi traffic could copy the cookie and use the settings page until it expires. That's why **firmware updates
+  always ask for the password**, even on a remembered phone. *Sign out all phones* and changing the password both
+  cancel every remembered phone at once.
 - **Big requests.** Request bodies are streamed with a 2 KB cap (the firmware image excepted); a client that hasn't
   signed in can't fill the clock's memory with a huge POST.
 - **Slow clients.** The display runs in its own task, so a slow or hostile web client can delay the settings page but

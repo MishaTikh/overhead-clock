@@ -49,7 +49,7 @@ struct Settings {
     int mode = MODE, clock_24h = CLOCK_24H;  // mode: 1 clock + planes, 0 planes only
     // the look
     bool jet_banner = true;                   // a little jet tows the city onto the sign
-    bool breathe = true;                      // the city brightens as the plane gets louder, fades as it leaves
+    bool breathe = false;                     // optional, planes-only mode: the city brightens with loudness
     bool milestones = true;                   // FIRST PLANE TODAY, 100 PLANES TODAY, NEW RECORD ...
     bool warm_night = true;                   // the clock turns a warmer amber between sunset and sunrise
 };

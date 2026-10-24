@@ -37,13 +37,16 @@ being a clock. No computer, server or account: it just needs Wi-Fi.
   takeoff vs landing, even the seconds sound takes to reach you) and lights up only while it's clearly audible.
 - **Arrivals and departures.** Landing planes show where they came from; departing planes, where they're going.
 - **Four display styles,** cycled with a button: `DENVER` · `DEN > MSP` · `DELTA DEN > MSP` · `DELTA 1902 DENVER > MINNEAPOLIS A321`.
-- **A real clock the rest of the time,** or dark between planes if you prefer.
+- **A real clock the rest of the time,** or dark between planes if you prefer. A little jet tows each city onto
+  the sign, the name always finishes before the time slides back, and the clock turns a warmer amber after sunset.
+- **Milestones in gold:** the first plane of the day, every hundredth, and a new farthest-ever city.
 - **Works anywhere.** Type your address once; the clock finds your nearest airport and time zone.
 - **Airline colors,** and **rare aircraft** (747, A380, Dreamliner, military, helicopters, vintage) in sparkling gold.
 - **Optional extras,** all off by default: inbound countdown, evening recap ("142 PLANES TODAY  FARTHEST TOKYO"),
   chime for rare planes, indoor/outdoor temperature, date, sunrise/sunset, and "landings over you today" from the wind.
-- **A dashboard on your phone:** today's planes (kept across restarts), the hours planes usually pass over you,
-  airport weather, and the clock's own health: uptime, why it last restarted, free memory.
+- **A settings page on your phone** with a live copy of the sign, sample planes when you change the look, and an
+  optional "remember this phone". Plus today's planes (kept across restarts), the hours planes usually pass over
+  you, airport weather, and the clock's own health: uptime, why it last restarted, free memory.
 
 ## Get started
 Everything happens over Wi-Fi: no cables, drivers or flashing tools.

@@ -101,11 +101,15 @@ static CRGB rgb(uint32_t c) { return CRGB((c >> 16) & 0xFF, (c >> 8) & 0xFF, c &
 
 // glide: slide in and out like a plane's city (for the clock's own screens); otherwise switch instantly,
 // which keeps button feedback snappy.
-static bool override_glide = false;
+static bool override_glide = false, override_plane = false;
+static double override_start = 0;
+// as_plane: a sample plane, towed in by the jet and leaving like a real one (for the settings page)
 static void show_override(const std::string& text, double secs, uint32_t color = 0xFF7800, float speed = 0,
-                          bool glide = false) {
+                          bool glide = false, bool as_plane = false) {
     LOCK();
-    override_glide = glide;
+    override_glide = glide || as_plane;
+    override_plane = as_plane;
+    override_start = now_s();
     override_speed = speed;
     override_text = text;
     override_rgb = color;
@@ -881,18 +885,89 @@ static String digest_param(const String& a, const char* name) {
 
 // The server library accepts a nonce any number of times, so a captured Authorization header could be
 // replayed (same path, any body) until the next challenge. Browsers and curl number their requests per
-// nonce ("nc"); a request whose number isn't higher than the last one seen for that nonce is refused.
+// nonce ("nc"). Each number is accepted once: a sliding window of the last 64 lets requests that were sent
+// together arrive in any order, while an exact repeat, or one older than the window, is refused.
 static String seen_nonce;
-static uint32_t seen_nc = 0;
+static uint32_t max_nc = 0;
+static uint64_t nc_seen = 0;  // bit i: number max_nc - i has been used
 static bool digest_ok() {
     if (!digest_uri_matches() || !web.authenticate("admin", admin_pw.c_str())) return false;
     String a = web.header("Authorization");
     String nonce = digest_param(a, "nonce");
     uint32_t nc = strtoul(digest_param(a, "nc").c_str(), nullptr, 16);
-    if (nonce == seen_nonce && nc <= seen_nc) return false;
-    seen_nonce = nonce;
-    seen_nc = nc;
+    if (nonce != seen_nonce) {
+        seen_nonce = nonce;
+        max_nc = nc;
+        nc_seen = 1;
+        return true;
+    }
+    if (nc > max_nc) {
+        uint32_t shift = nc - max_nc;
+        nc_seen = shift >= 64 ? 0 : nc_seen << shift;
+        nc_seen |= 1;
+        max_nc = nc;
+        return true;
+    }
+    uint32_t back = max_nc - nc;
+    if (back >= 64 || (nc_seen & (1ULL << back))) return false;
+    nc_seen |= 1ULL << back;
     return true;
+}
+
+// ---- remembered phones. "Remember this phone" puts a random token in a cookie (HttpOnly, SameSite=Strict,
+// 30 days); the clock keeps only its SHA-256, for up to 4 phones. The page is plain HTTP, so someone who can
+// read your Wi-Fi traffic could copy the cookie: that's the trade-off for not typing the password, and why
+// firmware updates still ask for it. Changing the password signs every phone out.
+struct Session { uint8_t hash[32]; uint32_t expires; };
+static const int MAX_SESSIONS = 4;
+static Session sessions[MAX_SESSIONS];
+static bool sessions_loaded = false, authed_by_cookie = false;
+
+static void sessions_load() {
+    Preferences p;
+    p.begin("sessions", true);
+    if (p.getBytesLength("s") == sizeof(sessions)) p.getBytes("s", sessions, sizeof(sessions));
+    else memset(sessions, 0, sizeof(sessions));
+    p.end();
+    sessions_loaded = true;
+}
+static void sessions_save() {
+    Preferences p;
+    p.begin("sessions", false);
+    p.putBytes("s", sessions, sizeof(sessions));
+    p.end();
+}
+static String cookie_token() {
+    String c = web.header("Cookie");
+    for (int from = 0;;) {
+        int i = c.indexOf("ovs=", from);
+        if (i < 0) return "";
+        if (i == 0 || c[i - 1] == ' ' || c[i - 1] == ';') {
+            String t = c.substring(i + 4, i + 4 + 64);
+            for (char ch : t) if (!isxdigit((unsigned char)ch)) return "";
+            return t;
+        }
+        from = i + 1;
+    }
+}
+static Session* session_for(const String& token) {
+    if (token.length() != 64 || !time_valid()) return nullptr;
+    if (!sessions_loaded) sessions_load();
+    uint8_t h[32];
+    mbedtls_sha256_ret((const uint8_t*)token.c_str(), 64, h, 0);
+    uint32_t now = (uint32_t)time(nullptr);
+    for (auto& s : sessions) {
+        if (s.expires <= now) continue;
+        uint8_t diff = 0;
+        for (int i = 0; i < 32; i++) diff |= s.hash[i] ^ h[i];  // constant time
+        if (!diff) return &s;
+    }
+    return nullptr;
+}
+static void sessions_clear() {
+    memset(sessions, 0, sizeof(sessions));
+    sessions_loaded = true;
+    sessions_save();
 }
 
 static void note_wrong_password(AuthStrike& st) {
@@ -909,8 +984,9 @@ static void security_headers() {
     web.sendHeader("Referrer-Policy", "no-referrer");
 }
 
-static bool authed() {
+static bool authed(bool allow_cookie = true) {
     security_headers();
+    authed_by_cookie = false;
     if (!host_ok()) {
         web.send(421, "text/plain", "Use the clock's own address.");
         return false;
@@ -921,6 +997,10 @@ static bool authed() {
     if (st.until && (int32_t)(st.until - now) > 0) {
         web.send(429, "text/plain", "Too many wrong passwords from this device. Wait a minute and try again.");
         return false;
+    }
+    if (allow_cookie && session_for(cookie_token())) {
+        authed_by_cookie = true;
+        return true;
     }
     if (digest_ok()) {
         st.fails = 0;
@@ -997,6 +1077,7 @@ static void api_status() {
     feed["budget"] = S.daily_budget;
     feed["next_poll_s"] = (int)fmax(0, next_poll - now);
     feed["error"] = last_error;
+    d["remembered"] = authed_by_cookie;
     d["free_heap"] = ESP.getFreeHeap();
     d["min_free_heap"] = ESP.getMinFreeHeap();
     d["uptime_s"] = (uint32_t)(esp_timer_get_time() / 1000000);
@@ -1164,6 +1245,20 @@ static void api_locate() {
 static void api_preview() {
     JsonDocument body;
     if (!write_ok(body)) return;
+    if (body["sample"] | false) {  // a sample plane in the current style, colors and look
+        Route r;
+        r.from_city = "Denver"; r.from_iata = "DEN"; r.to_city = "Minneapolis"; r.to_iata = "MSP"; r.mkt = "DL";
+        LOCK();
+        std::string text = format_flight(S.display_format, &r, false, "DAL1902", "A321");
+        uint8_t cr, cg, cb;
+        airline_color("DL", "DAL1902", cr, cg, cb);
+        float speed_px = S.scroll_speed > 0 ? S.scroll_speed : SCROLL_PX_PER_S;
+        UNLOCK();
+        double secs = (MATRIX_W + 3 + JET_W + 1 + text_columns(text).size() + 12) / speed_px + 0.5;
+        show_override(text, secs, ((uint32_t)cr << 16) | ((uint32_t)cg << 8) | cb, 0, true, true);
+        web.send(204);
+        return;
+    }
     String t = body["text"] | "";
     t = t.substring(0, 40);
     t.toUpperCase();
@@ -1187,8 +1282,67 @@ static void api_password() {
     secret_set_admin_password(pw);
     admin_pw = pw;
     UNLOCK();
+    sessions_clear();
     d["ok"] = true;
     send_json(d);
+}
+
+static const char* COOKIE_ATTRS = "; Path=/; HttpOnly; SameSite=Strict";
+
+static void api_remember() {
+    JsonDocument body;
+    if (!write_ok(body)) return;
+    JsonDocument d;
+    if (!time_valid()) {
+        d["error"] = "The clock doesn't know the date yet. Try again once it's online.";
+        send_json(d, 409);
+        return;
+    }
+    if (!sessions_loaded) sessions_load();
+    uint8_t tok[32];
+    esp_fill_random(tok, sizeof(tok));
+    char hex[65];
+    for (int i = 0; i < 32; i++) snprintf(hex + 2 * i, 3, "%02x", tok[i]);
+    Session* slot = &sessions[0];  // an expired slot, or the one expiring soonest
+    for (auto& s : sessions) if (s.expires < slot->expires) slot = &s;
+    mbedtls_sha256_ret((const uint8_t*)hex, 64, slot->hash, 0);
+    slot->expires = (uint32_t)time(nullptr) + 30 * 86400;
+    sessions_save();
+    web.sendHeader("Set-Cookie", String("ovs=") + hex + "; Max-Age=2592000" + COOKIE_ATTRS);
+    d["ok"] = true;
+    send_json(d);
+}
+
+// Signs this phone out (all: every remembered phone).
+static void api_signout() {
+    JsonDocument body;
+    if (!write_ok(body)) return;
+    if (body["all"] | false) {
+        sessions_clear();
+    } else if (Session* s = session_for(cookie_token())) {
+        memset(s, 0, sizeof(*s));
+        sessions_save();
+    }
+    web.sendHeader("Set-Cookie", String("ovs=; Max-Age=0") + COOKIE_ATTRS);
+    web.send(200, "application/json", "{\"ok\":true}");
+}
+
+// What the sign shows right now: 32 columns of on bits, dim bits, dim level and color, as hex.
+static void api_frame() {
+    if (!authed()) return;
+    char out[MATRIX_W * 12 + 1];
+    LOCK();
+    for (int x = 0; x < MATRIX_W; x++)
+        snprintf(out + 12 * x, 13, "%02x%02x%02x%06x", live_frame[x].on, live_frame[x].dim, live_frame[x].dim_level,
+                 (unsigned)(live_frame[x].rgb & 0xFFFFFF));
+    UNLOCK();
+    web.send(200, "text/plain", out);
+}
+
+// Checks the password itself (not a remembered phone), so the browser has it before a firmware upload.
+static void api_update_ready() {
+    if (!authed(false)) return;
+    web.send(204);
 }
 
 static void api_forget_wifi() {
@@ -1274,7 +1428,7 @@ static void api_update_stream() {
 
 static void api_update_done() {
     if (!ota_allowed) {  // let authed() send the right challenge or refusal
-        if (!authed()) return;
+        if (!authed(false)) return;
         web.send(web.header("X-Overhead") == "1" ? 400 : 403, "application/json",
                  "{\"error\":\"update requests need the X-Overhead header and ?sha256= of the image, from this version's settings page or installer\"}");
         return;
@@ -1675,8 +1829,8 @@ void setup() {
 
     start_time_sync();
     // mDNS starts in loop() once Wi-Fi is up
-    static const char* hdrs[] = {"X-Overhead", "Authorization", "Content-Type"};
-    web.collectHeaders(hdrs, 3);
+    static const char* hdrs[] = {"X-Overhead", "Authorization", "Content-Type", "Cookie"};
+    web.collectHeaders(hdrs, 4);
     web.on("/", HTTP_GET, handle_ui);
     web.on("/api/status", HTTP_GET, api_status);
     web.on("/api/settings", HTTP_GET, api_get_settings);
@@ -1687,6 +1841,10 @@ void setup() {
     web.on("/api/wifi/forget", HTTP_POST, api_forget_wifi, api_body_stream);
     web.on("/api/restart", HTTP_POST, api_restart, api_body_stream);
     web.on("/api/update", HTTP_POST, api_update_done, api_update_stream);
+    web.on("/api/update/ready", HTTP_GET, api_update_ready);
+    web.on("/api/frame", HTTP_GET, api_frame);
+    web.on("/api/remember", HTTP_POST, api_remember, api_body_stream);
+    web.on("/api/signout", HTTP_POST, api_signout, api_body_stream);
     web.onNotFound([]() { security_headers(); web.send(404, "text/plain", "Not found"); });
     web.begin();
 
@@ -1857,7 +2015,12 @@ static void render_frame() {
         loud = 1;
         active = true;
         notice = !override_glide;
-        via_override = true;
+        via_override = !override_plane;
+        if (override_plane) {  // a sample plane: loudness rises and falls over its time on the sign
+            float p = (float)((now - override_start) / fmax(0.1, override_until - override_start));
+            loud = sinf(fminf(1.0f, fmaxf(0.0f, p)) * 3.14159f);
+            plane_hex = 0xFFFFFFFF;
+        }
     }
     UNLOCK();
     if (active) {
@@ -1917,12 +2080,12 @@ static void render_frame() {
         bright = base;
     }
 
-    // Breathing: the city brightens as the plane gets louder and fades as it leaves (smoothed, so it glows
-    // rather than flickers). Off, the city is always at full color.
+    // Breathing (planes-only mode): the city brightens as the plane gets louder and fades as it leaves
+    // (smoothed, so it glows rather than flickers). With the clock on, the city is always at full color.
     static float breath = 1;
     CRGB text_color = col_color;
     if (kind == PLANE) {
-        float target = S.breathe ? 0.35f + 0.65f * loud : 1.0f;
+        float target = S.breathe && S.mode == 0 ? 0.35f + 0.65f * loud : 1.0f;
         breath += (target - breath) * 0.06f;
         text_color.nscale8_video((uint8_t)(255 * breath));
     }

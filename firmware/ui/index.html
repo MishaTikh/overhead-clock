@@ -87,6 +87,12 @@
   .checks label { display: flex; gap: 8px; align-items: center; font-size: 0.92rem; }
   .checks input { width: 18px; height: 18px; accent-color: var(--accent); }
   @media (max-width: 420px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  details.more > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-weight: 600; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary::after { content: "Show"; font: 500 0.82rem var(--sans); color: var(--muted); }
+  details.more[open] > summary::after { content: "Hide"; }
+  .moregrid { display: grid; gap: 18px; margin-top: 18px; }
   .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
            background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 999px; font-size: 0.85rem; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
@@ -157,8 +163,8 @@
     </div>
   </section>
 
-  <section aria-labelledby="h-mode">
-    <h2 id="h-mode">What the sign shows</h2>
+  <section aria-labelledby="h-sign">
+    <h2 id="h-sign">The sign</h2>
     <div class="row">
       <span>Mode</span>
       <div class="seg" role="group" aria-label="Mode">
@@ -178,11 +184,58 @@
     </div>
     <p class="hint">City is where a landing plane came from, or where a departing plane is going. The left button on the clock cycles these.</p>
     <div class="row">
+      <label for="brightness">Brightness</label>
+      <select id="brightness" style="max-width: 220px">
+        <option value="auto">Auto, follows the room light</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+    <p class="hint">The right button on the clock cycles brightness. Auto follows the room; set its levels under More settings.</p>
+    <div class="row"><label for="clock_color">Clock color</label><input type="color" id="clock_color"></div>
+    <div class="row">
+      <label for="airline_colors">Planes in airline colors <span class="hint">(Delta red, Sun Country orange, United blue…)</span></label>
+      <span class="switch"><input type="checkbox" id="airline_colors"><span></span></span>
+    </div>
+  </section>
+  <section aria-labelledby="h-now">
+    <h2 id="h-now">Nearby and recent</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Flight</th><th>Type</th><th class="num">Miles</th><th class="num">Above you</th><th class="num">dBA</th></tr></thead>
+      <tbody id="planes"></tbody>
+    </table></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Heard at</th><th>Flight</th><th>From or to</th><th class="num">Peak dBA</th><th class="num">Seconds</th></tr></thead>
+      <tbody id="passes"></tbody>
+    </table></div>
+  </section>
+  <details class="more" id="more">
+    <summary>More settings</summary>
+    <div class="moregrid">
+  <section aria-labelledby="h-look">
+    <h2 id="h-look">The look</h2>
+    <div class="row"><label for="jet_banner">A little jet tows the city onto the sign</label>
+      <span class="switch"><input type="checkbox" id="jet_banner"><span></span></span></div>
+    <div class="row"><label for="breathe">The city glows brighter as the plane gets louder <span class="hint">(planes-only mode)</span></label>
+      <span class="switch"><input type="checkbox" id="breathe"><span></span></span></div>
+    <div class="row"><label for="milestones">Celebrate milestones in gold <span class="hint">(first plane today, every hundredth, new farthest city)</span></label>
+      <span class="switch"><input type="checkbox" id="milestones"><span></span></span></div>
+    <div class="row"><label for="warm_night">Warmer clock color after sunset</label>
+      <span class="switch"><input type="checkbox" id="warm_night"><span></span></span></div>
+    <div class="row">
       <label for="clock_24h">24-hour clock</label>
       <span class="switch"><input type="checkbox" id="clock_24h"><span></span></span>
     </div>
+    <div class="row"><label for="plane_color">Plane color <span class="hint">(other airlines, or all planes when airline colors are off)</span></label><input type="color" id="plane_color"></div>
+    <div class="row"><label for="scroll_speed">Scroll speed</label><span class="val" id="v-scroll_speed"></span></div>
+    <input type="range" id="scroll_speed" min="8" max="45" step="1">
+    <div class="row">
+      <label for="preview">Try some text on the sign</label>
+      <div class="pair" style="flex: 1 1 240px"><input type="text" id="preview" value="SAN FRANCISCO" maxlength="40"><button class="btn" id="previewbtn">Show</button></div>
+    </div>
+    <p class="hint">Changes to the style, colors or scroll speed fly a sample plane across the clock so you can see them.</p>
   </section>
-
   <section aria-labelledby="h-alerts">
     <h2 id="h-alerts">Alerts</h2>
     <div class="row"><label for="rare_alerts">Rare aircraft in gold with a sparkle <span class="hint">(747, A380, Dreamliner, military, helicopters, vintage)</span></label>
@@ -195,7 +248,6 @@
       <div class="pair" style="grid-template-columns: auto auto"><select id="recap_hour" aria-label="Recap time"></select>
       <span class="switch"><input type="checkbox" id="recap"><span></span></span></div></div>
   </section>
-
   <section aria-labelledby="h-rot">
     <h2 id="h-rot">Clock screen extras</h2>
     <p class="hint">In clock mode, show these for a few seconds every so often. Leave them all off for just the time.</p>
@@ -218,41 +270,13 @@
     <div class="row"><label for="temp_offset_c">Indoor sensor correction <span class="hint">(the clock warms its own sensor a little)</span></label><span class="val" id="v-temp_offset_c"></span></div>
     <input type="range" id="temp_offset_c" min="-10" max="5" step="0.5">
   </section>
-
-  <section aria-labelledby="h-colors">
-    <h2 id="h-colors">Colors</h2>
-    <div class="row"><label for="clock_color">Clock color</label><input type="color" id="clock_color"></div>
-    <div class="row">
-      <label for="airline_colors">Planes in airline colors <span class="hint">(Delta red, Sun Country orange, United blue…)</span></label>
-      <span class="switch"><input type="checkbox" id="airline_colors"><span></span></span>
-    </div>
-    <div class="row"><label for="plane_color">Plane color <span class="hint">(other airlines, or all planes when airline colors are off)</span></label><input type="color" id="plane_color"></div>
-  </section>
-
-  <section aria-labelledby="h-bright">
-    <h2 id="h-bright">Brightness and text</h2>
-    <div class="row">
-      <label for="brightness">Brightness</label>
-      <select id="brightness" style="max-width: 220px">
-        <option value="auto">Auto, follows the room light</option>
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
-    </div>
-    <p class="hint">The right button on the clock cycles brightness. Auto moves between the two levels below.</p>
+  <section aria-labelledby="h-levels">
+    <h2 id="h-levels">Auto brightness levels</h2>
     <div class="row"><label for="bright_min">In a dark room</label><span class="val" id="v-bright_min"></span></div>
     <input type="range" id="bright_min" min="1" max="120">
     <div class="row"><label for="bright_max">In daylight</label><span class="val" id="v-bright_max"></span></div>
     <input type="range" id="bright_max" min="10" max="255">
-    <div class="row"><label for="scroll_speed">Scroll speed</label><span class="val" id="v-scroll_speed"></span></div>
-    <input type="range" id="scroll_speed" min="8" max="45" step="1">
-    <div class="row">
-      <label for="preview">Try some text on the sign</label>
-      <div class="pair" style="flex: 1 1 240px"><input type="text" id="preview" value="SAN FRANCISCO" maxlength="40"><button class="btn" id="previewbtn">Show</button></div>
-    </div>
   </section>
-
   <section aria-labelledby="h-quiet">
     <h2 id="h-quiet">Quiet hours</h2>
     <div class="row">
@@ -264,7 +288,6 @@
     </div>
     <p class="hint">During quiet hours the clock keeps showing the time but checks for no planes, which saves the free data allowance for daytime. Choose the same hour twice to turn quiet hours off.</p>
   </section>
-
   <section aria-labelledby="h-sens">
     <h2 id="h-sens">Sensitivity</h2>
     <div class="row"><label for="on_db">Show a plane when it's louder than</label><span class="val" id="v-on_db"></span></div>
@@ -276,21 +299,11 @@
     <div class="row"><label for="smart_polling">Save requests when planes are elsewhere <span class="hint">(wind sends them away, or hours that are usually quiet)</span></label>
       <span class="switch"><input type="checkbox" id="smart_polling"><span></span></span></div>
   </section>
-
-  <section aria-labelledby="h-now">
-    <h2 id="h-now">Nearby and recent</h2>
-    <div class="tablewrap"><table>
-      <thead><tr><th>Flight</th><th>Type</th><th class="num">Miles</th><th class="num">Above you</th><th class="num">dBA</th></tr></thead>
-      <tbody id="planes"></tbody>
-    </table></div>
-    <div class="tablewrap"><table>
-      <thead><tr><th>Heard at</th><th>Flight</th><th>From or to</th><th class="num">Peak dBA</th><th class="num">Seconds</th></tr></thead>
-      <tbody id="passes"></tbody>
-    </table></div>
-  </section>
-
   <section aria-labelledby="h-net">
     <h2 id="h-net">Wi-Fi and security</h2>
+    <div class="row"><label for="remember">Remember this phone for 30 days <span class="hint">(no password on this phone; firmware updates still ask for it)</span></label>
+      <span class="switch"><input type="checkbox" id="remember"><span></span></span></div>
+    <div class="confirm"><button class="btn" id="signout-all">Sign out all phones</button><span class="msg" id="remembermsg"></span></div>
     <div class="kv" id="netinfo"></div>
     <label for="newpw" class="hint">Change the admin password (8 or more characters). Forgot it? Hold the clock's middle button for 3 seconds and it shows the address and password.</label>
     <div class="pair"><input type="password" id="newpw" autocomplete="new-password" minlength="8"><button class="btn" id="pwbtn">Change</button></div>
@@ -306,6 +319,16 @@
     <p class="msg" id="fwmsg"></p>
     <div class="confirm" id="forgetbox"></div>
   </section>
+    </div>
+  </details>
+
+
+
+
+
+
+
+
   <p class="hint" style="text-align:center">Overhead is open source (MIT). Flight data adsb.lol (ODbL) · routes VRS standing data
     (CC0) and adsbdb · airports OurAirports · addresses © OpenStreetMap contributors and the US Census Bureau geocoder ·
     elevation and time zone by Open-Meteo.com (CC BY 4.0) · weather NOAA aviationweather.gov. Not affiliated with any
@@ -324,7 +347,7 @@
     on_db: 60, off_db: 57, cal_offset: 0, daily_budget: 450, brightness: "auto", display: "city",
     airport: "auto", timezone: "America/Chicago", rare_alerts: true, rare_chime: false, inbound_countdown: false,
     recap: false, recap_hour: 20, rotation: [], rotate_every_s: 60, units: "F", temp_offset_c: -4, smart_polling: true,
-    airport_board: false, ntp_server: "time.cloudflare.com" };
+    airport_board: false, ntp_server: "time.cloudflare.com", jet_banner: true, breathe: false, milestones: true, warm_night: true };
   const SAMPLE_STATUS = { version: "1.0", mode: "clock", quiet: false, sign: "", sign_db: 0, sign_color: "#FF0A14",
     wifi: { ssid: "Sample Home Wi-Fi", rssi: -58, ip: "192.168.1.42" },
     feed: { calls_today: 212, budget: 450, next_poll_s: 37, error: "" }, free_heap: 142000, min_free_heap: 98000, uptime_s: 93600, reset_reason: "power on",
@@ -392,7 +415,8 @@
     $("brightness").value = s.brightness;
     $("airport").value = s.airport;
     fillTimezones(s.timezone);
-    for (const k of ["rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling", "airport_board"]) $(k).checked = s[k];
+    for (const k of ["rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling", "airport_board",
+                     "jet_banner", "breathe", "milestones", "warm_night"]) $(k).checked = s[k];
     if (document.activeElement !== $("ntp_server")) $("ntp_server").value = s.ntp_server;
     $("recap_hour").value = s.recap_hour;
     for (const c of $("rotation").querySelectorAll("input")) c.checked = s.rotation.includes(c.value);
@@ -401,20 +425,35 @@
     $("quiet_end").value = s.quiet_end;
   }
 
-  let saveTimer, pending = {};
+  // Changing how planes look flies a sample plane across the clock, so the change is seen, not imagined.
+  const LOOK = ["display", "plane_color", "airline_colors", "jet_banner", "breathe", "scroll_speed"];
+  const SAMPLE_TEXT = { city: "DENVER", codes: "DEN > MSP", airline: "DELTA DEN > MSP", full: "DELTA 1902  DENVER > MINNEAPOLIS  A321" };
+  let saveTimer, sampleTimer, pending = {};
   function save(patch) {
     Object.assign(settings, patch);
     Object.assign(pending, patch);
     clearTimeout(saveTimer);
+    const look = Object.keys(patch).some(k => LOOK.includes(k));
     saveTimer = setTimeout(async () => {
       const body = pending; pending = {};
-      try { settings = await api("/api/settings", body); fill(); toast("Saved"); }
+      try {
+        settings = await api("/api/settings", body); fill();
+        if (look) { clearTimeout(sampleTimer); sampleTimer = setTimeout(flySample, 500); } else toast("Saved");
+      }
       catch (e) { toast(e.message); }
     }, 350);
   }
+  async function flySample() {
+    try {
+      await api("/api/preview", { sample: true });
+      if (demo) { previewUntil = Date.now() + 6000; previewText = SAMPLE_TEXT[settings.display] || "DENVER"; }
+      toast("Saved. Watch the clock");
+    } catch (e) { toast(e.message); }
+  }
   for (const b of document.querySelectorAll(".seg button[data-mode]")) b.onclick = () => { save({ mode: b.dataset.mode }); fill(); };
   $("ntpbtn").onclick = () => save({ ntp_server: $("ntp_server").value.trim() });
-  for (const k of ["clock_24h", "airline_colors", "rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling", "airport_board"])
+  for (const k of ["clock_24h", "airline_colors", "rare_alerts", "rare_chime", "inbound_countdown", "recap", "smart_polling", "airport_board",
+                   "jet_banner", "breathe", "milestones", "warm_night"])
     $(k).onchange = e => save({ [k]: e.target.checked });
   $("recap_hour").onchange = e => save({ recap_hour: Number(e.target.value) });
   $("rotation").onchange = () => save({ rotation: [...$("rotation").querySelectorAll("input:checked")].map(c => c.value) });
@@ -527,6 +566,7 @@
     if (document.activeElement !== $("address") && !$("address").value) $("address").value = s.location.address || "";
     showLoc();
     fillAirports(s.airport);
+    if (document.activeElement !== $("remember")) $("remember").checked = !!s.remembered;
     $("board-row").hidden = s.airport.iata !== "MSP";
     $("signtext").textContent = s.sign ? `Showing ${s.sign}` : settings && settings.mode === "clock" ? "Showing the time" : "Dark until a plane is audible";
     $("signdb").textContent = s.sign ? `${s.sign_db.toFixed(1)} dBA` : "";
@@ -601,6 +641,8 @@
     setMsg("fwmsg", "Checking the file…");
     const bytes = new Uint8Array(await f.arrayBuffer());
     if (bytes.length < 100000 || bytes[0] !== 0xE9) { setMsg("fwmsg", "That doesn't look like an ESP32 firmware image (overhead-tc001-app.bin).", "bad"); return; }
+    try { const ready = await fetch("/api/update/ready"); if (!ready.ok) throw 0; }
+    catch (e) { setMsg("fwmsg", "Firmware updates need the clock's password. Sign in when asked, then try again.", "bad"); return; }
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/update?sha256=" + sha256hex(bytes));
     xhr.setRequestHeader("X-Overhead", "1");
@@ -615,6 +657,17 @@
     $("fwbtn").disabled = true;
     xhr.onloadend = () => { $("fwbtn").disabled = false; };
     xhr.send(bytes);
+  };
+
+  $("remember").onchange = async e => {
+    try {
+      if (e.target.checked) { await api("/api/remember", {}); setMsg("remembermsg", "This phone stays signed in for 30 days.", "ok"); }
+      else { await api("/api/signout", {}); setMsg("remembermsg", "This phone will ask for the password again.", ""); }
+    } catch (err) { e.target.checked = !e.target.checked; setMsg("remembermsg", err.message, "bad"); }
+  };
+  $("signout-all").onclick = async () => {
+    try { await api("/api/signout", { all: true }); $("remember").checked = false; setMsg("remembermsg", "Every phone will ask for the password again.", "ok"); }
+    catch (err) { setMsg("remembermsg", err.message, "bad"); }
   };
 
   function renderForget(confirming) {
@@ -650,8 +703,36 @@
   }
   const cv = $("led"), ctx = cv.getContext("2d"), P = cv.width / 32;
   let shownText = "", t0 = 0;
+
+  // The clock's own pixels, five times a second while this page is open: exactly what the sign shows.
+  let live = null, liveAt = 0;
+  async function pollFrame() {
+    if (!demo && document.visibilityState === "visible") {
+      try { const r = await fetch("/api/frame"); if (r.ok) { live = await r.text(); liveAt = Date.now(); } } catch (e) {}
+    }
+    setTimeout(pollFrame, 200);
+  }
+  function drawLive() {
+    const off = getComputedStyle(document.documentElement).getPropertyValue("--off");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (let x = 0; x < 32; x++) {
+      const c = live.substr(x * 12, 12), on = parseInt(c.substr(0, 2), 16), dim = parseInt(c.substr(2, 2), 16);
+      const lvl = parseInt(c.substr(4, 2), 16) / 255, rgb = "#" + c.substr(6, 6);
+      const r = parseInt(c.substr(6, 2), 16), g = parseInt(c.substr(8, 2), 16), b = parseInt(c.substr(10, 2), 16);
+      const dimrgb = `rgb(${Math.round(r * lvl)},${Math.round(g * lvl)},${Math.round(b * lvl)})`;
+      for (let y = 0; y < 8; y++) {
+        const isOn = (on >> y) & 1, isDim = !isOn && ((dim >> y) & 1);
+        const color = isOn ? rgb : isDim ? dimrgb : off;
+        ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = isOn ? P * 0.5 : 0;
+        ctx.fillRect(x * P + P * 0.09, y * P + P * 0.09, P * 0.82, P * 0.82);
+      }
+    }
+    ctx.shadowBlur = 0;
+  }
+
   function frame() {
     const now = Date.now();
+    if (live && now - liveAt < 3000) { drawLive(); requestAnimationFrame(frame); return; }
     let text = "", color = settings ? settings.clock_color : "#FFAA6E", c = null;
     if (now < previewUntil) { text = previewText; color = settings && !settings.airline_colors ? settings.plane_color : "#FF0A14"; }
     else if (status && status.sign) { text = status.sign; color = status.sign_color; }
@@ -682,8 +763,11 @@
     try { settings = await api("/api/settings"); }
     catch (e) { demo = true; $("demo").hidden = false; settings = structuredClone(SAMPLE_SETTINGS); status = structuredClone(SAMPLE_STATUS); }
     fill();
+    try { if (localStorage.getItem("ov-more") === "1") $("more").open = true; } catch (e) {}
+    $("more").addEventListener("toggle", () => { try { localStorage.setItem("ov-more", $("more").open ? "1" : "0"); } catch (e) {} });
     requestAnimationFrame(frame);
     poll();
+    pollFrame();
   })();
 })();
 </script>
