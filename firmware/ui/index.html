@@ -796,7 +796,7 @@
     if (!demo && document.visibilityState === "visible") {
       try { const r = await fetch("/api/frame"); if (r.ok) { live = await r.text(); liveAt = Date.now(); } } catch (e) {}
     }
-    setTimeout(pollFrame, 200);
+    setTimeout(pollFrame, 250);
   }
   function drawLive() {
     const off = getComputedStyle(document.documentElement).getPropertyValue("--off");

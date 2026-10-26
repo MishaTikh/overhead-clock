@@ -548,6 +548,14 @@ void Tracker::heard_level(Track& t, double now, float& slant) {
 }
 
 void Tracker::tick(double now) {
+    // The wall clock can jump (the internet time sync stepping a clock that booted on the battery clock).
+    // Positions, passes and the sign only care about elapsed time, so move every timestamp with it.
+    if (last_tick_ > 0 && (now < last_tick_ || now - last_tick_ > 5)) {
+        double d = now - last_tick_;
+        for (auto& t : tracks) if (t.used) { t.t_fix += d; t.pass_start += d; }
+        if (msg.active) msg.since += d;
+    }
+    last_tick_ = now;
     for (auto& t : tracks) {
         if (!t.used) continue;
         if (now - t.t_fix > MAX_EXTRAPOLATE_S) {
@@ -617,6 +625,21 @@ void Tracker::fill_text(Message& m, Track& t, double now) {
 void Tracker::end_pass(Track& t, double now) {
     if (!t.in_pass) return;
     t.in_pass = false;
+    // the same flight within 5 minutes of its last pass (a restart mid-pass, or a second track for the same
+    // aircraft): extend that pass rather than count it twice
+    if (n_passes && t.f.cs[0] && !strcmp(passes[0].cs, t.f.cs) && fabs(t.pass_start - (double)passes[0].start) < 300) {
+        Pass& q = passes[0];
+        q.peak = fmaxf(q.peak, t.pass_peak);
+        q.secs = fmaxf(q.secs, (float)(now - (double)q.start));
+        if (!q.city[0]) {
+            RouteEntry* e = routes.get(t.f.cs, t.departing, now);
+            if (e && e->state == RouteState::Found) {
+                strncpy(q.city, (t.departing ? e->route.to_city : e->route.from_city).c_str(), sizeof(q.city) - 1);
+                strncpy(q.other_iata, (t.departing ? e->route.to_iata : e->route.from_iata).c_str(), 3);
+            }
+        }
+        return;
+    }
     for (int i = MAX_PASSES - 1; i > 0; i--) passes[i] = passes[i - 1];
     Pass& p = passes[0];
     memset(&p, 0, sizeof(p));
@@ -632,7 +655,7 @@ void Tracker::end_pass(Track& t, double now) {
     strncpy(p.rare, t.rare.c_str(), sizeof(p.rare) - 1);
     p.peak = t.pass_peak;
     p.agl = (int)t.pass_agl;
-    p.secs = (float)(now - t.pass_start);
+    p.secs = fmaxf(0.0f, (float)(now - t.pass_start));
     p.dep = t.departing;
     if (n_passes < MAX_PASSES) n_passes++;
     struct tm lt;

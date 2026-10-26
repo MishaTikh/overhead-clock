@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4
+- Fixed: a jump in the clock's time (the internet time sync stepping a clock that booted on its battery clock)
+  could produce a pass with a negative length and skew positions for a moment. Elapsed time now moves with it.
+- A pass that resumes after a restart, or a second track for the same flight, extends the earlier pass instead of
+  counting as a second plane.
+- A failed airport-weather fetch retries after 2 minutes instead of 30.
+
 ## 0.2.3
 Self-healing, after a day when a clock showed only the time:
 - The clock restarts itself (saving the day's data first) if the network task shows no sign of life for 5 minutes,

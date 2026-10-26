@@ -187,6 +187,7 @@ public:
     int count() const;
 private:
     bool is_departing(const Track& t) const;
+    double last_tick_ = -1;   // for spotting a jump in the wall clock
     bool will_pass_over(const Track& t, double now) const;
     void heard_level(Track& t, double now, float& slant);
     void choose(double now);

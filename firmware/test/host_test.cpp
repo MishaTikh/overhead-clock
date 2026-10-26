@@ -63,6 +63,47 @@ int main(int argc, char** argv) {
     printf("pass: on at %.0f s, off at %.0f s (%.0f s audible), peak %.1f dBA, text '%s'\n", on, off, off - on, peak, tr.msg.text.c_str());
     CHECK(on > 0 && off > on && off - on > 20 && off - on < 50);
     CHECK(peak > 70 && peak < 78);   // A320-class at ~2,200 ft overhead
+    // a clock step mid-pass (time sync after booting on the battery clock): still one pass, positive length
+    {
+        Tracker ts;
+        double on2 = -1, off2 = -1;
+        for (int s = 0; s <= 120; s++) {
+            double wall = t0 + s - (s >= 70 ? 46 : 0);   // the wall clock jumps back 46 s at s = 70
+            if (s % 15 == 0) {
+                double d_nm = 9.5 - 145.0 / 3600 * s;
+                double lat, lon;
+                move(44.88780, -93.23410, 301.3, d_nm * 6076.12, lat, lon);
+                Fix f; f.hex = 0xabc123; strcpy(f.cs, "DAL2159"); strcpy(f.type, "B739"); strcpy(f.cat, "A3");
+                f.lat = lat; f.lon = lon; f.alt = 841 + 50 + d_nm * 6076.12 * 0.0524; f.gs = 145; f.trk = 121.3; f.vrate = -770;
+                ts.ingest({f}, wall);
+            }
+            ts.tick(wall);
+            if (ts.msg.active && on2 < 0) on2 = s;
+            if (!ts.msg.active && on2 >= 0 && off2 < 0) off2 = s;
+        }
+        printf("pass with a clock step: on at %.0f s, off at %.0f s, %d pass(es), %.1f s long\n", on2, off2, ts.n_passes, ts.n_passes ? ts.passes[0].secs : 0);
+        CHECK(ts.n_passes == 1 && ts.passes[0].secs > 20 && ts.passes[0].secs < 50);
+        CHECK(off2 > on2 && off2 - on2 > 20 && off2 - on2 < 50);   // same audible window as without the step
+    }
+    // a pass that resumes after a restart (the earlier part restored from flash) is extended, not counted twice
+    {
+        Tracker tm;
+        memset(&tm.passes[0], 0, sizeof(Pass));
+        strcpy(tm.passes[0].cs, "DAL2159"); tm.passes[0].start = (time_t)(t0 + 53); tm.passes[0].peak = 70; tm.passes[0].secs = 10;
+        tm.n_passes = 1;
+        for (int s = 50; s <= 120; s++) {
+            if (s % 15 == 0 || s == 50) {
+                double d_nm = 9.5 - 145.0 / 3600 * s;
+                double lat, lon;
+                move(44.88780, -93.23410, 301.3, d_nm * 6076.12, lat, lon);
+                Fix f; f.hex = 0xabc123; strcpy(f.cs, "DAL2159"); strcpy(f.type, "B739"); strcpy(f.cat, "A3");
+                f.lat = lat; f.lon = lon; f.alt = 841 + 50 + d_nm * 6076.12 * 0.0524; f.gs = 145; f.trk = 121.3; f.vrate = -770;
+                tm.ingest({f}, t0 + s);
+            }
+            tm.tick(t0 + s);
+        }
+        CHECK(tm.n_passes == 1 && tm.stats.planes == 0 && tm.passes[0].peak > 70);
+    }
     // loudness by type when the feed gives no size category: a 737 sounds like an A3, a 777 like a heavy
     CHECK(level_at("", "B738", false, 3000, 2000) == level_at("A3", nullptr, false, 3000, 2000));
     CHECK(level_at("", "B77W", false, 3000, 2000) > level_at("", "CRJ9", false, 3000, 2000) + 5);

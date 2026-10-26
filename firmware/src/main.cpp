@@ -562,13 +562,13 @@ static void lookup_elevation_tz(double lat, double lon, float& elev_ft, String& 
 }
 
 // Airport weather (METAR) from aviationweather.gov: wind for the runway flow, temperature for the clock.
-static void fetch_weather(const std::string& airport, double home_lat, double home_lon) {
+static bool fetch_weather(const std::string& airport, double home_lat, double home_lon) {
     AirportInfo ap;
-    if (!airport_by_iata(airport, ap) || ap.icao.empty()) return;
+    if (!airport_by_iata(airport, ap) || ap.icao.empty()) return true;  // nothing to fetch
     WiFiClientSecure client;
     HTTPClient http;
     String url = "https://aviationweather.gov/api/data/metar?format=json&ids=" + String(ap.icao.c_str());
-    if (https_get(http, client, url, 8000) != 200) { http.end(); return; }
+    if (https_get(http, client, url, 8000) != 200) { http.end(); return false; }
     JsonDocument filter;
     for (const char* k : {"obsTime", "temp", "dewp", "wdir", "wspd", "wgst", "cover", "rawOb"}) filter[0][k] = true;
     JsonDocument doc;
@@ -576,7 +576,7 @@ static void fetch_weather(const std::string& airport, double home_lat, double ho
     bool ok = !deserializeJson(doc, body, DeserializationOption::Filter(filter));
     http.end();
     JsonObject m = doc[0];
-    if (!ok || m.isNull()) return;
+    if (!ok || m.isNull()) return false;
     Weather w;
     w.ok = true;
     w.obs = (time_t)(m["obsTime"] | 0L);
@@ -604,6 +604,7 @@ static void fetch_weather(const std::string& airport, double home_lat, double ho
     flow = fl;
     tracker.baro_corr_ft = corr;
     UNLOCK();
+    return true;
 }
 
 static void load_hour_model() {
@@ -863,8 +864,7 @@ static void network_task(void*) {
 
         // airport weather every 30 minutes (separate free service, not part of the flight-data budget)
         if (have_loc && !airport.empty() && now - last_weather > 1800) {
-            last_weather = now;
-            fetch_weather(airport, home_lat, home_lon);
+            last_weather = fetch_weather(airport, home_lat, home_lon) ? now : now - 1800 + 120;  // failed: retry in 2 min
         }
 
         LOCK();
