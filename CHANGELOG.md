@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.3
+Self-healing, after a day when a clock showed only the time:
+- The clock restarts itself (saving the day's data first) if the network task shows no sign of life for 5 minutes,
+  Wi-Fi is gone for 10 minutes, or memory stays too low to fetch anything for 5 minutes. Wi-Fi is nudged to
+  reconnect after a minute offline.
+- Quiet hours are decided by the display task, so a stuck network task can't leave them switched on all day.
+- A restart log on the dashboard: the last restarts with their reasons and how long the clock had been running,
+  including the self-healing ones, so a bad day can be explained after the fact.
+- The dashboard also shows the largest free memory block, which is what TLS connections actually need.
+
 ## 0.2.2
 - Fixed: the installer window said it couldn't find the clock right after finding it, and showed the PC's own
   address. (PowerShell closures; the callbacks no longer use them.)

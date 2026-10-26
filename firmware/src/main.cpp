@@ -68,6 +68,27 @@ static volatile double last_poll = 0, next_poll = 0;
 static String last_error;
 static volatile bool quiet_now = false;
 
+// ---- self-healing. The display task keeps the time on its own; everything else can be restarted if it
+// gets stuck. The network task says it's alive once per loop; if it goes quiet for 5 minutes, or Wi-Fi is
+// gone for 10, or memory stays too low for 5, the clock restarts itself (the day's data is saved first).
+static volatile uint32_t net_alive_ms = 0;
+static String heal_reason;  // why the clock last restarted itself, saved for the log
+static const char* reset_reason_name(int rr) {
+    static const char* names[] = {"unknown", "power on", "external pin", "restart", "crash", "interrupt watchdog",
+                                  "task watchdog", "other watchdog", "deep sleep", "brownout (low power)", "SDIO"};
+    return rr >= 0 && rr < (int)(sizeof(names) / sizeof(names[0])) ? names[rr] : "unknown";
+}
+static void save_today();
+static void self_heal(const char* why) {
+    save_today();
+    Preferences p;
+    p.begin("boot", false);
+    p.putString("why", why);  // read back at the next boot into the restart log
+    p.end();
+    delay(200);
+    ESP.restart();
+}
+
 // airport weather and the learned busy hours
 static Weather weather;
 static FlowInfo flow;
@@ -657,6 +678,37 @@ static void save_visited() {
     p.end();
 }
 
+// The restart log: the last 6 restarts as "reason after uptime", newest first. The uptime of the run that
+// ended is known because it's saved every 2 minutes along with the day's data.
+static String boot_log;
+static void record_boot() {
+    Preferences p;
+    p.begin("boot", false);
+    uint32_t prev_up = p.getUInt("up", 0);
+    String why = p.getString("why", "");
+    String log = p.getString("log", "");
+    String reason = why.length() ? why : String(reset_reason_name((int)esp_reset_reason()));
+    String entry = reason + " after ";
+    if (prev_up < 3600) entry += String(prev_up / 60) + " min";
+    else if (prev_up < 86400) entry += String(prev_up / 3600.0f, 1) + " h";
+    else entry += String(prev_up / 86400.0f, 1) + " d";
+    log = entry + (log.length() ? "|" + log : "");
+    int n = 0, cut = -1;
+    for (unsigned i = 0; i < log.length(); i++) if (log[i] == '|' && ++n == 6) { cut = i; break; }
+    if (cut >= 0) log = log.substring(0, cut);
+    p.putString("log", log);
+    p.putString("why", "");
+    p.putUInt("up", 0);
+    p.end();
+    boot_log = log;
+}
+static void save_uptime() {
+    Preferences p;
+    p.begin("boot", false);
+    p.putUInt("up", (uint32_t)(esp_timer_get_time() / 1000000));
+    p.end();
+}
+
 static void load_today(int yday) {
     Preferences p;
     p.begin("today", true);
@@ -756,9 +808,29 @@ static void do_geocode() {
 static void network_task(void*) {
     double last_refill = now_s(), last_weather = -1e9;
     int today = -1;
+    uint32_t offline_since = 0, lowmem_since = 0;
     for (;;) {
-        if (WiFi.status() != WL_CONNECTED || !time_valid()) { delay(500); continue; }
-        if (ESP.getFreeHeap() < 40000) { set_error("low memory, skipping network"); delay(5000); continue; }
+        net_alive_ms = millis();
+        if (WiFi.status() != WL_CONNECTED) {
+            // reconnect in the background; after a minute nudge the radio, after ten minutes start over
+            if (!offline_since) offline_since = millis();
+            uint32_t off = millis() - offline_since;
+            if (off > 60000 && (off / 500) % 60 == 0) WiFi.reconnect();
+            if (off > 600000) self_heal("wi-fi lost for 10 min");
+            delay(500);
+            continue;
+        }
+        offline_since = 0;
+        if (!time_valid()) { delay(500); continue; }
+        // TLS needs about 40 KB in one piece; if that's gone and stays gone, nothing we do will fetch anything
+        if (ESP.getFreeHeap() < 40000 || ESP.getMaxAllocHeap() < 24000) {
+            if (!lowmem_since) lowmem_since = millis();
+            if (millis() - lowmem_since > 300000) self_heal("low memory for 5 min");
+            set_error("low memory, skipping network");
+            delay(5000);
+            continue;
+        }
+        lowmem_since = 0;
 
         if (geo_state == GeoState::Pending) do_geocode();
 
@@ -843,12 +915,13 @@ static void network_task(void*) {
 
         if (tracker.visited_dirty) save_visited();  // a new city: a rare, small write
         static int saved_planes = -1;
-        static double last_save = 0;
+        static double last_save = 0, last_up = 0;
         if (tracker.stats.planes != saved_planes && now - last_save > 120) {
             saved_planes = tracker.stats.planes;
             last_save = now;
             save_today();
         }
+        if (now - last_up > 120) { last_up = now; save_uptime(); }
 
         std::string cs;
         bool dep = false;
@@ -1124,10 +1197,9 @@ static void api_status() {
     d["free_heap"] = ESP.getFreeHeap();
     d["min_free_heap"] = ESP.getMinFreeHeap();
     d["uptime_s"] = (uint32_t)(esp_timer_get_time() / 1000000);
-    static const char* reasons[] = {"unknown", "power on", "external pin", "restart", "crash", "interrupt watchdog",
-                                    "task watchdog", "other watchdog", "deep sleep", "brownout (low power)", "SDIO"};
-    int rr = (int)esp_reset_reason();
-    d["reset_reason"] = rr >= 0 && rr < (int)(sizeof(reasons) / sizeof(reasons[0])) ? reasons[rr] : "unknown";
+    d["reset_reason"] = reset_reason_name((int)esp_reset_reason());
+    d["boot_log"] = boot_log;
+    d["max_alloc"] = ESP.getMaxAllocHeap();
     JsonObject loc = d["location"].to<JsonObject>();
     loc["set"] = location_set();
     loc["address"] = S.address.c_str();
@@ -1844,6 +1916,7 @@ void setup() {
     lock = xSemaphoreCreateRecursiveMutex();
     settings_load();
     load_hour_model();
+    record_boot();
     apply_timezone();
     admin_pw = secret_admin_password();
     String setup_pw = secret_setup_password();
@@ -1961,6 +2034,14 @@ static void housekeeping(double now) {
         tracker.update_inbound(now);
         UNLOCK();
         check_milestones();
+        if (time_valid()) {  // quiet hours are decided here, so a stuck network task can't freeze them on
+            time_t tt = (time_t)now;
+            struct tm lt;
+            localtime_r(&tt, &lt);
+            quiet_now = is_quiet(lt.tm_hour);
+        }
+        // the network task has 5 minutes to show signs of life (a TLS or DNS hang can't be timed out from inside)
+        if (net_alive_ms && millis() - net_alive_ms > 300000) self_heal("network task stuck for 5 min");
     }
     chime_tick();
 }
