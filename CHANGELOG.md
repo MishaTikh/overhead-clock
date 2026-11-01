@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.6
+- The clock can remember up to 3 other Wi-Fi networks (a phone's hotspot, say) besides home, under *More settings ->
+  Wi-Fi and security*. When home Wi-Fi is out of reach it scans and joins the strongest one it knows, and comes back
+  to home Wi-Fi by itself. So it can show planes away from home, from a phone's hotspot.
+
 ## 0.2.5
 - A clock away from its Wi-Fi (a demo, a different room) is left alone: only a connection that was lost after
   connecting triggers the 10-minute self-healing restart.

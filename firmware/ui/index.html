@@ -312,6 +312,10 @@
       <span class="switch"><input type="checkbox" id="remember"><span></span></span></div>
     <div class="confirm"><button class="btn" id="signout-all">Sign out all phones</button><span class="msg" id="remembermsg"></span></div>
     <div class="kv" id="netinfo"></div>
+    <label for="xssid" class="hint">Other networks the clock may join when home Wi-Fi is out of reach, such as a phone's hotspot for showing it off somewhere else (up to 3; it comes back to home Wi-Fi on its own).</label>
+    <div class="confirm" id="netlist"></div>
+    <div class="pair" style="grid-template-columns: 1fr 1fr auto"><input type="text" id="xssid" placeholder="Network name" maxlength="32" autocapitalize="off" spellcheck="false"><input type="password" id="xpsk" placeholder="Password" autocomplete="off" minlength="8" maxlength="63"><button class="btn" id="xaddbtn">Add</button></div>
+    <p class="msg" id="xmsg"></p>
     <label for="newpw" class="hint">Change the admin password (8 or more characters). Forgot it? Hold the clock's middle button for 3 seconds and it shows the address and password.</label>
     <div class="pair"><input type="password" id="newpw" autocomplete="new-password" minlength="8"><button class="btn" id="pwbtn">Change</button></div>
     <p class="msg" id="pwmsg"></p>
@@ -356,7 +360,7 @@
     recap: false, recap_hour: 20, rotation: [], rotate_every_s: 60, units: "F", temp_offset_c: -4, smart_polling: true,
     airport_board: false, ntp_server: "time.cloudflare.com", jet_banner: true, breathe: false, milestones: true, warm_night: true };
   const SAMPLE_STATUS = { version: "1.0", mode: "clock", quiet: false, sign: "", sign_db: 0, sign_color: "#FF0A14",
-    wifi: { ssid: "Sample Home Wi-Fi", rssi: -58, ip: "192.168.1.42" },
+    wifi: { ssid: "Sample Home Wi-Fi", rssi: -58, ip: "192.168.1.42" }, networks: ["Misha's iPhone"],
     feed: { calls_today: 212, budget: 450, next_poll_s: 37, error: "" }, free_heap: 142000, min_free_heap: 98000, uptime_s: 93600, reset_reason: "power on", boot_log: "power on after 6.2 d|restart after 3.1 d", max_alloc: 96000,
     location: { set: true, address: "4100 Example Ave S, Minneapolis, MN 55416", lat: 44.93, lon: -93.34, elev_ft: 912, timezone: "America/Chicago", lookup: "idle", message: "" },
     airport: { iata: "MSP", city: "Minneapolis", auto: true, dist_nm: 5.2, nearby: [ { iata: "MSP", city: "Minneapolis", dist_nm: 5.2 }, { iata: "STP", city: "St Paul", dist_nm: 8.9 } ] },
@@ -387,6 +391,8 @@
       setTimeout(() => { Object.assign(status.location, { lookup: "ok", address: body.address || "", message: body.address ? body.address.toUpperCase() : "Coordinates saved" }); }, 1200);
       return Promise.resolve({ lookup: "pending" });
     }
+    if (path === "/api/wifi/add") { status.networks = [...(status.networks || []).filter(n => n !== body.ssid), body.ssid]; return Promise.resolve({}); }
+    if (path === "/api/wifi/remove") { status.networks = (status.networks || []).filter(n => n !== body.ssid); return Promise.resolve({}); }
     if (path === "/api/map") return Promise.resolve({ home: { lat: 44.93, lon: -93.34 }, airport: "MSP", cities: [
       { i: "DEN", c: "Denver", la: 39.86, lo: -104.67, t: true }, { i: "SEA", c: "Seattle", la: 47.45, lo: -122.31, t: true },
       { i: "CLT", c: "Charlotte", la: 35.21, lo: -80.94, t: true }, { i: "AMS", c: "Amsterdam", la: 52.31, lo: 4.76, t: true },
@@ -592,6 +598,7 @@
     $("passes").innerHTML = s.passes.length ? s.passes.map(p => `<tr><td>${p.t ? new Date(p.t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "earlier"}</td><td>${esc(p.cs)}</td><td>${esc(p.city || "—")}</td><td class="num">${p.peak.toFixed(1)}</td><td class="num">${Math.round(p.secs)}</td><td class="num">${(p.wait || 0).toFixed(1)} s</td></tr>`).join("")
       : `<tr><td colspan="6" class="hint">No audible planes yet today.</td></tr>`;
     const bars = s.wifi.rssi > -60 ? "strong" : s.wifi.rssi > -72 ? "fair" : "weak";
+    renderNets(s.networks || []);
     $("netinfo").innerHTML = "";
     for (const [k, v] of [["Network", s.wifi.ssid], ["Signal", `${bars} (${s.wifi.rssi} dBm)`], ["Clock's address", s.wifi.ip],
                           ["Flight data today", `${s.feed.calls_today} of ${s.feed.budget} requests`],
@@ -685,6 +692,32 @@
   $("signout-all").onclick = async () => {
     try { await api("/api/signout", { all: true }); $("remember").checked = false; setMsg("remembermsg", "Every phone will ask for the password again.", "ok"); }
     catch (err) { setMsg("remembermsg", err.message, "bad"); }
+  };
+
+  async function refreshStatus() { try { status = await api("/api/status"); renderStatus(); } catch (e) {} }
+  function renderNets(names) {
+    const box = $("netlist");
+    const key = names.join("\n");
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    box.replaceChildren();
+    if (!names.length) { const m = document.createElement("span"); m.className = "hint"; m.textContent = "No other networks yet."; box.append(m); return; }
+    for (const name of names) {
+      const chip = document.createElement("span"); chip.textContent = name;
+      const b = document.createElement("button"); b.className = "btn"; b.textContent = "Remove";
+      b.onclick = async () => { try { await api("/api/wifi/remove", { ssid: name }); box.dataset.key = ""; refreshStatus(); } catch (e) { setMsg("xmsg", e.message, "bad"); } };
+      box.append(chip, b);
+    }
+  }
+  $("xaddbtn").onclick = async () => {
+    const ssid = $("xssid").value.trim(), password = $("xpsk").value;
+    if (!ssid || password.length < 8) { setMsg("xmsg", "A network name and a password of at least 8 characters.", "bad"); return; }
+    try {
+      await api("/api/wifi/add", { ssid, password });
+      $("xssid").value = ""; $("xpsk").value = "";
+      setMsg("xmsg", `Added ${ssid}. The clock joins it when home Wi-Fi is out of reach (within about a minute).`, "ok");
+      $("netlist").dataset.key = ""; refreshStatus();
+    } catch (e) { setMsg("xmsg", e.message, "bad"); }
   };
 
   function renderForget(confirming) {

@@ -33,6 +33,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <WiFiManager.h>
+#include <esp_wifi.h>
 #include <Wire.h>
 #include <esp_bt.h>
 #include <esp_task_wdt.h>
@@ -806,6 +807,76 @@ static void do_geocode() {
     finish_geocode(GeoState::Ok, msg);
 }
 
+// ---- other Wi-Fi networks (a phone hotspot, so the clock can be shown off away from home). The home network
+// stays where WiFiManager put it, in the Wi-Fi driver's own flash record; up to 3 more live in NVS "wifi". When
+// the clock has been offline for 20 s it scans and joins the strongest network it knows, home preferred. The
+// driver's record is switched to RAM-only first, so joining a hotspot never overwrites "home".
+#define EXTRA_NETS 3
+struct KnownNet { String ssid, psk; };
+static KnownNet extra_nets[EXTRA_NETS];
+static KnownNet home_net;
+static volatile bool scan_now = false;  // a network was just added: look for it straight away
+
+static void load_extra_nets() {
+    Preferences p;
+    p.begin("wifi", true);
+    for (int i = 0; i < EXTRA_NETS; i++) {
+        extra_nets[i].ssid = p.getString(("s" + String(i)).c_str(), "");
+        extra_nets[i].psk = p.getString(("p" + String(i)).c_str(), "");
+    }
+    p.end();
+}
+static void save_extra_nets() {
+    Preferences p;
+    p.begin("wifi", false);
+    for (int i = 0; i < EXTRA_NETS; i++) {
+        p.putString(("s" + String(i)).c_str(), extra_nets[i].ssid);
+        p.putString(("p" + String(i)).c_str(), extra_nets[i].psk);
+    }
+    p.end();
+}
+static void read_home_net() {
+    wifi_config_t conf;
+    if (esp_wifi_get_config(WIFI_IF_STA, &conf) != ESP_OK) return;
+    conf.sta.ssid[31] = 0;
+    conf.sta.password[63] = 0;
+    home_net.ssid = (const char*)conf.sta.ssid;
+    home_net.psk = (const char*)conf.sta.password;
+}
+static int extra_count() {
+    int n = 0;
+    for (auto& e : extra_nets) if (e.ssid.length()) n++;
+    return n;
+}
+
+// Offline for a while: scan, and join the best network we know. Returns true if it took over from the plain
+// "keep reconnecting to the last network" behaviour. Runs on the network task (a scan blocks it for ~2 s).
+static bool wifi_try_known(uint32_t off_ms) {
+    static uint32_t last_scan = 0;
+    if (!extra_count() || home_net.ssid.isEmpty()) return false;
+    if (!scan_now && (off_ms < 20000 || millis() - last_scan < 45000)) return true;
+    scan_now = false;
+    last_scan = millis();
+    WiFi.disconnect(false);  // stop the driver's own reconnect attempts so the scan can start
+    delay(100);
+    int n = WiFi.scanNetworks(false, false, false, 150);
+    const KnownNet* best = nullptr;
+    int best_rssi = -1000;
+    LOCK();  // the list can change from the settings page
+    for (int i = 0; i < n; i++) {
+        String ssid = WiFi.SSID(i);
+        int rssi = WiFi.RSSI(i);
+        if (ssid == home_net.ssid && rssi > -85) { best = &home_net; break; }  // home wins whenever it's in reach
+        for (auto& e : extra_nets)
+            if (e.ssid.length() && ssid == e.ssid && rssi > best_rssi) { best = &e; best_rssi = rssi; }
+    }
+    WiFi.scanDelete();
+    if (!best) best = &home_net;  // nothing known in sight: keep trying home, as before
+    WiFi.begin(best->ssid.c_str(), best->psk.c_str());
+    UNLOCK();
+    return true;
+}
+
 static void network_task(void*) {
     double last_refill = now_s(), last_weather = -1e9;
     int today = -1;
@@ -818,7 +889,7 @@ static void network_task(void*) {
             // restart after ten minutes; a clock that's simply away from its Wi-Fi is left alone.
             if (!offline_since) offline_since = millis();
             uint32_t off = millis() - offline_since;
-            if (off > 60000 && (off / 500) % 60 == 0) WiFi.reconnect();
+            if (!wifi_try_known(off) && off > 60000 && (off / 500) % 60 == 0) WiFi.reconnect();
             if (off > 600000 && had_wifi) self_heal("wi-fi lost for 10 min");
             delay(500);
             continue;
@@ -1191,6 +1262,8 @@ static void api_status() {
     wifi["ssid"] = WiFi.SSID();
     wifi["rssi"] = WiFi.RSSI();
     wifi["ip"] = WiFi.localIP().toString();
+    JsonArray nets = d["networks"].to<JsonArray>();
+    for (auto& e : extra_nets) if (e.ssid.length()) nets.add(e.ssid);
     JsonObject feed = d["feed"].to<JsonObject>();
     feed["calls_today"] = (int)calls_today;
     feed["budget"] = S.daily_budget;
@@ -1488,14 +1561,59 @@ static void api_update_ready() {
     web.send(204);
 }
 
+// {"ssid": "...", "password": "..."}: another network the clock may join (a phone hotspot)
+static void api_wifi_add() {
+    JsonDocument body;
+    if (!write_ok(body)) return;
+    String ssid = body["ssid"] | "", psk = body["password"] | "";
+    ssid.trim();
+    if (ssid.isEmpty() || ssid.length() > 32 || psk.length() < 8 || psk.length() > 63) {
+        web.send(400, "application/json", "{\"error\":\"a network name (up to 32 characters) and a password of 8 to 63\"}");
+        return;
+    }
+    if (ssid == home_net.ssid) {
+        web.send(400, "application/json", "{\"error\":\"that is the home network\"}");
+        return;
+    }
+    int slot = -1;
+    for (int i = 0; i < EXTRA_NETS; i++) if (extra_nets[i].ssid == ssid) slot = i;  // same name: replace
+    for (int i = 0; slot < 0 && i < EXTRA_NETS; i++) if (extra_nets[i].ssid.isEmpty()) slot = i;
+    if (slot < 0) {
+        web.send(400, "application/json", "{\"error\":\"the clock remembers up to 3 other networks; remove one first\"}");
+        return;
+    }
+    LOCK();
+    extra_nets[slot].ssid = ssid;
+    extra_nets[slot].psk = psk;
+    save_extra_nets();
+    UNLOCK();
+    scan_now = true;
+    web.send(204);
+}
+
+// {"ssid": "..."}
+static void api_wifi_remove() {
+    JsonDocument body;
+    if (!write_ok(body)) return;
+    String ssid = body["ssid"] | "";
+    LOCK();
+    for (auto& e : extra_nets) if (e.ssid == ssid) { e.ssid = ""; e.psk = ""; }
+    save_extra_nets();
+    UNLOCK();
+    web.send(204);
+}
+
 static void api_forget_wifi() {
     JsonDocument body;
     if (!write_ok(body)) return;
     web.send(202, "application/json", "{\"ok\":true}");
     delay(300);
+    esp_wifi_set_storage(WIFI_STORAGE_FLASH);
     WiFiManager wm;
     wm.setDebugOutput(false);
     wm.resetSettings();
+    for (auto& e : extra_nets) { e.ssid = ""; e.psk = ""; }
+    save_extra_nets();
     ESP.restart();
 }
 
@@ -1970,6 +2088,9 @@ void setup() {
         // already set up: never block. Show the time and keep reconnecting in the background.
         WiFi.begin();
     }
+    read_home_net();
+    load_extra_nets();
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);  // from here on, joining another network never replaces "home"
 
     start_time_sync();
     // mDNS starts in loop() once Wi-Fi is up
@@ -1983,6 +2104,8 @@ void setup() {
     web.on("/api/preview", HTTP_POST, api_preview, api_body_stream);
     web.on("/api/password", HTTP_POST, api_password, api_body_stream);
     web.on("/api/wifi/forget", HTTP_POST, api_forget_wifi, api_body_stream);
+    web.on("/api/wifi/add", HTTP_POST, api_wifi_add, api_body_stream);
+    web.on("/api/wifi/remove", HTTP_POST, api_wifi_remove, api_body_stream);
     web.on("/api/restart", HTTP_POST, api_restart, api_body_stream);
     web.on("/api/update", HTTP_POST, api_update_done, api_update_stream);
     web.on("/api/update/ready", HTTP_GET, api_update_ready);

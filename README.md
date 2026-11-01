@@ -80,6 +80,9 @@ page. Settings are kept. More help: the [website](https://mishatikh.github.io/ov
 
 Hold the left button while plugging the clock in to forget Wi-Fi and start setup again.
 
+Taking it somewhere? Under *More settings → Wi-Fi and security* the clock can remember up to 3 other networks, such
+as a phone's hotspot. It joins one when home Wi-Fi is out of reach and comes back to home Wi-Fi on its own.
+
 ## How it works
 - **Positions** come from the free [adsb.lol](https://adsb.lol) feed (about 500 requests a day per home). The clock
   predicts each plane's path between requests, polls quickly only when a plane is about to pass, slows down when the
