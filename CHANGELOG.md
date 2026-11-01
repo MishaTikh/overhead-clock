@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5
+- A clock away from its Wi-Fi (a demo, a different room) is left alone: only a connection that was lost after
+  connecting triggers the 10-minute self-healing restart.
+
 ## 0.2.4
 - Fixed: a jump in the clock's time (the internet time sync stepping a clock that booted on its battery clock)
   could produce a pass with a negative length and skew positions for a moment. Elapsed time now moves with it.

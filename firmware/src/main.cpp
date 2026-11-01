@@ -810,18 +810,21 @@ static void network_task(void*) {
     double last_refill = now_s(), last_weather = -1e9;
     int today = -1;
     uint32_t offline_since = 0, lowmem_since = 0;
+    bool had_wifi = false;
     for (;;) {
         net_alive_ms = millis();
         if (WiFi.status() != WL_CONNECTED) {
-            // reconnect in the background; after a minute nudge the radio, after ten minutes start over
+            // reconnect in the background; after a minute nudge the radio. A connection that was *lost* gets one
+            // restart after ten minutes; a clock that's simply away from its Wi-Fi is left alone.
             if (!offline_since) offline_since = millis();
             uint32_t off = millis() - offline_since;
             if (off > 60000 && (off / 500) % 60 == 0) WiFi.reconnect();
-            if (off > 600000) self_heal("wi-fi lost for 10 min");
+            if (off > 600000 && had_wifi) self_heal("wi-fi lost for 10 min");
             delay(500);
             continue;
         }
         offline_since = 0;
+        had_wifi = true;
         if (!time_valid()) { delay(500); continue; }
         // TLS needs about 40 KB in one piece; if that's gone and stays gone, nothing we do will fetch anything
         if (ESP.getFreeHeap() < 40000 || ESP.getMaxAllocHeap() < 24000) {
